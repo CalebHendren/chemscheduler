@@ -1,0 +1,370 @@
+(function (root) {
+  'use strict';
+  var TS = (root.TS = root.TS || {});
+  var U = TS.util;
+
+  // A MaxHoursPerDay column from an older export is simply not read: the
+  // schedule no longer caps hours by the day.
+  var TAIL_COLUMNS = [
+    'MaxHoursPerWeek', 'MinHoursPerWeek', 'Availability', 'Notes'
+  ];
+
+  /* One column per class, so a spreadsheet follows whatever classes the
+   * schedule is set up for. The short code is the header, and an import
+   * accepts either the code or the full name -- a file exported before a class
+   * was renamed still lines up.
+   */
+  function columnsFor(subjects) {
+    return ['First', 'Last', 'Email', 'Room']
+      .concat((subjects || U.SUBJECTS).map(function (s) { return s.short; }))
+      .concat(TAIL_COLUMNS);
+  }
+
+  /* ---- RFC 4180 encode / decode ---------------------------------------- */
+
+  function encodeField(value) {
+    var s = value === null || value === undefined ? '' : String(value);
+    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function encodeRows(rows) {
+    return rows.map(function (row) {
+      return row.map(encodeField).join(',');
+    }).join('\r\n') + '\r\n';
+  }
+
+  // Hand-rolled because a quoted field may legally contain commas and
+  // newlines, which a split(',') import would silently corrupt.
+  function parseRows(text) {
+    var rows = [];
+    var row = [];
+    var field = '';
+    var inQuotes = false;
+    var i = 0;
+
+    text = String(text).replace(/^﻿/, '');
+
+    while (i < text.length) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      }
+      if (c === '"') { inQuotes = true; i++; continue; }
+      if (c === ',') { row.push(field); field = ''; i++; continue; }
+      if (c === '\r') { i++; continue; }
+      if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+      field += c; i++;
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+
+    return rows.filter(function (r) {
+      return r.some(function (v) { return String(v).trim() !== ''; });
+    });
+  }
+
+  /* ---- availability text ----------------------------------------------- */
+
+  var DAY_TOKENS = {
+    m: 0, mo: 0, mon: 0, monday: 0,
+    t: 1, tu: 1, tue: 1, tues: 1, tuesday: 1,
+    w: 2, we: 2, wed: 2, weds: 2, wednesday: 2,
+    r: 3, th: 3, thu: 3, thur: 3, thurs: 3, thursday: 3,
+    // Read so a "Mon-Fri" from another roster is understood, then dropped:
+    // there is no tutoring on Friday.
+    f: 4, fr: 4, fri: 4, friday: 4
+  };
+
+  function formatAvailability(avail) {
+    var signatures = [];
+    var bySignature = {};
+
+    for (var d = 0; d < U.DAYS; d++) {
+      var runs = U.availabilityRuns(avail, d);
+      if (!runs.length) continue;
+      var sig = runs.map(function (r) {
+        return U.minutesToHhmm(U.slotStartMinutes(r[0])) + '-' + U.minutesToHhmm(U.slotStartMinutes(r[1]));
+      }).join(', ');
+      if (!bySignature[sig]) { bySignature[sig] = []; signatures.push(sig); }
+      bySignature[sig].push(U.DAY_ABBR[d]);
+    }
+
+    // Days sharing identical hours collapse into one clause, so a typical
+    // roster reads as "Mon/Wed/Fri 12:00-17:00" rather than three clauses.
+    return signatures.map(function (sig) {
+      return bySignature[sig].join('/') + ' ' + sig;
+    }).join('; ');
+  }
+
+  function parseTimeParts(text) {
+    var s = String(text).trim().toLowerCase().replace(/\./g, '');
+    var m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+    if (!m) return null;
+    var h = parseInt(m[1], 10);
+    var min = m[2] ? parseInt(m[2], 10) : 0;
+    if (h > 24 || min > 59) return null;
+    return { hour: h, minute: min, meridiem: m[3] || null };
+  }
+
+  function withMeridiem(parts, meridiem) {
+    var h = parts.hour;
+    if (meridiem === 'pm' && h < 12) h += 12;
+    if (meridiem === 'am' && h === 12) h = 0;
+    return h * 60 + parts.minute;
+  }
+
+  /*
+   * A bare hour is resolved against the 7:00 AM - 8:30 PM schedule day rather
+   * than assumed to be 24-hour: "1-4pm" means the afternoon, and nobody types
+   * a shift starting at 1:00 AM.
+   */
+  function resolveBare(parts) {
+    var h = parts.hour >= 1 && parts.hour <= 6 ? parts.hour + 12 : parts.hour;
+    return h * 60 + parts.minute;
+  }
+
+  // "1-4pm": the trailing meridiem governs both ends unless that inverts them.
+  function parseTimeRange(startText, endText) {
+    var a = parseTimeParts(startText);
+    var b = parseTimeParts(endText);
+    if (!a || !b) return null;
+
+    var end = b.meridiem ? withMeridiem(b, b.meridiem) : resolveBare(b);
+    var start;
+    if (a.meridiem) {
+      start = withMeridiem(a, a.meridiem);
+    } else if (b.meridiem) {
+      start = withMeridiem(a, b.meridiem);
+      if (start >= end) start = resolveBare(a);
+    } else {
+      start = resolveBare(a);
+    }
+    return { start: start, end: end };
+  }
+
+  function parseDayList(text) {
+    var out = [];
+    var cleaned = String(text).trim();
+    if (!cleaned) return out;
+
+    cleaned.split(/[\/,&+]|\s+and\s+/).forEach(function (part) {
+      part = part.trim().toLowerCase();
+      if (!part) return;
+      var range = part.match(/^([a-z]+)\s*(?:-|–|through|thru|to)\s*([a-z]+)$/);
+      if (range) {
+        var a = DAY_TOKENS[range[1]], b = DAY_TOKENS[range[2]];
+        if (a === undefined || b === undefined) return;
+        for (var d = Math.min(a, b); d <= Math.max(a, b); d++) out.push(d);
+        return;
+      }
+      var single = DAY_TOKENS[part.replace(/[^a-z]/g, '')];
+      if (single !== undefined) out.push(single);
+    });
+
+    return out.filter(function (v, i, arr) { return arr.indexOf(v) === i; });
+  }
+
+  function parseAvailability(text, warn) {
+    var avail = U.emptyAvailability();
+    var raw = String(text || '').trim();
+    if (!raw) return avail;
+
+    raw.split(/;|\n/).forEach(function (clause) {
+      clause = clause.trim();
+      if (!clause) return;
+
+      // "Mon/Wed 12:00-17:00, 18:00-20:00" -- days first, then time ranges.
+      var split = clause.match(/^([^0-9]+?)\s+(.*)$/);
+      if (!split) { warn('Could not read availability clause "' + clause + '"'); return; }
+
+      var named = parseDayList(split[1]);
+      if (!named.length) { warn('Unrecognized day(s) in "' + clause + '"'); return; }
+      var days = named.filter(function (d) { return d < U.DAYS; });
+      if (days.length < named.length) {
+        warn('Skipped Friday in "' + clause + '": tutoring runs ' + U.DAY_NAMES[0] + ' to ' +
+          U.DAY_NAMES[U.DAYS - 1]);
+      }
+      if (!days.length) return;
+
+      var any = false;
+      split[2].split(',').forEach(function (range) {
+        var parts = range.split(/-|–|to/);
+        if (parts.length < 2) { warn('Could not read time range "' + range.trim() + '"'); return; }
+        var span = parseTimeRange(parts[0], parts[1]);
+        if (!span) {
+          warn('Could not read time range "' + range.trim() + '"');
+          return;
+        }
+
+        var startSlot = Math.round((span.start - U.DAY_START_MIN) / U.SLOT_MINUTES);
+        var endSlot = Math.round((span.end - U.DAY_START_MIN) / U.SLOT_MINUTES);
+        var clampedStart = Math.max(0, startSlot);
+        var clampedEnd = Math.min(U.SLOTS_PER_DAY, endSlot);
+
+        if (clampedEnd <= clampedStart) {
+          warn('Time range "' + range.trim() + '" falls outside 7:00 AM-8:30 PM');
+          return;
+        }
+        if (clampedStart !== startSlot || clampedEnd !== endSlot) {
+          warn('Trimmed "' + range.trim() + '" to the 7:00 AM-8:30 PM schedule window');
+        }
+
+        days.forEach(function (d) {
+          for (var s = clampedStart; s < clampedEnd; s++) avail[U.idx(d, s)] = 1;
+        });
+        any = true;
+      });
+
+      if (!any) warn('No usable times in "' + clause + '"');
+    });
+
+    return avail;
+  }
+
+  /* ---- tutor rows ------------------------------------------------------ */
+
+  function truthy(value) {
+    var s = String(value || '').trim().toLowerCase();
+    return s === 'y' || s === 'yes' || s === 'true' || s === '1' || s === 'x';
+  }
+
+  function exportTutors(tutors) {
+    var classes = U.SUBJECTS.slice();
+    var rows = [columnsFor(classes)];
+    tutors.forEach(function (t) {
+      rows.push([t.firstName, t.lastName, t.email || '', t.room || '']
+        .concat(classes.map(function (c) { return t.subjects[c.key] ? 'Yes' : 'No'; }))
+        .concat([
+          t.maxHoursPerWeek,
+          t.minHoursPerWeek || 0,
+          formatAvailability(t.availability),
+          t.notes || ''
+        ]));
+    });
+    return encodeRows(rows);
+  }
+
+  function normalizeHeader(name) {
+    return String(name).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  function headerIndex(header) {
+    var map = {};
+    header.forEach(function (name, i) {
+      map[normalizeHeader(name)] = i;
+    });
+    return map;
+  }
+
+  function importTutors(text) {
+    var rows = parseRows(text);
+    var warnings = [];
+    var tutors = [];
+
+    if (!rows.length) {
+      return { tutors: [], warnings: ['The file is empty.'] };
+    }
+
+    var map = headerIndex(rows[0]);
+    if (map.first === undefined) {
+      return { tutors: [], warnings: ['No "First" column found. Export a CSV first to see the expected columns.'] };
+    }
+
+    function cell(row, key) {
+      var i = map[key];
+      return i === undefined ? '' : String(row[i] === undefined ? '' : row[i]).trim();
+    }
+
+    // A class is found by its short code or by its full name, whichever the
+    // file happens to use in the header.
+    var classes = U.SUBJECTS.map(function (c) {
+      var byShort = normalizeHeader(c.short);
+      var byLabel = normalizeHeader(c.label);
+      return { key: c.key, header: map[byShort] !== undefined ? byShort : byLabel };
+    });
+
+    for (var r = 1; r < rows.length; r++) {
+      var row = rows[r];
+      var lineNo = r + 1;
+      var first = cell(row, 'first');
+      if (!first) {
+        warnings.push('Row ' + lineNo + ': skipped, no first name.');
+        continue;
+      }
+
+      var rowWarnings = [];
+      var availability = parseAvailability(cell(row, 'availability'), function (msg) {
+        rowWarnings.push('Row ' + lineNo + ' (' + first + '): ' + msg);
+      });
+
+      var maxWeek = parseFloat(cell(row, 'maxhoursperweek'));
+      var minWeek = parseFloat(cell(row, 'minhoursperweek'));
+
+      var subjects = {};
+      var marked = 0;
+      classes.forEach(function (c) {
+        subjects[c.key] = truthy(cell(row, c.header));
+        if (subjects[c.key]) marked++;
+      });
+
+      tutors.push({
+        firstName: first,
+        lastName: cell(row, 'last'),
+        email: cell(row, 'email'),
+        room: cell(row, 'room'),
+        subjects: subjects,
+        // Left out when the cell is blank, so the schedule's default applies.
+        maxHoursPerWeek: isFinite(maxWeek) ? maxWeek : undefined,
+        minHoursPerWeek: isFinite(minWeek) ? minWeek : 0,
+        availability: availability,
+        notes: cell(row, 'notes')
+      });
+
+      if (!marked) {
+        rowWarnings.push('Row ' + lineNo + ' (' + first +
+          '): no classes checked, so they cannot be scheduled.');
+      }
+
+      warnings = warnings.concat(rowWarnings);
+    }
+
+    return { tutors: tutors, warnings: warnings };
+  }
+
+  /* Three filled-in rows, because an empty template leaves the reader guessing
+   * what "Availability" and "Room" are supposed to look like. The class
+   * answers follow whatever classes the schedule has: the first tutor teaches
+   * the first two, the second the first one, and the faculty member all of
+   * them, in their own office.
+   */
+  function templateCsv() {
+    var classes = U.SUBJECTS.slice();
+    function answers(picked) {
+      return classes.map(function (c, i) { return picked(i) ? 'Yes' : 'No'; });
+    }
+    return encodeRows([
+      columnsFor(classes),
+      ['Rosa', 'Quint', 'rquint@example.edu', '']
+        .concat(answers(function (i) { return i < 2; }))
+        .concat([15, 0, 'Mon/Wed 12:00-17:00', '']),
+      ['Theo', 'Park', 'tpark@example.edu', '']
+        .concat(answers(function (i) { return i === 0; }))
+        .concat([15, 0, 'Mon-Thu 09:00-12:00', '']),
+      ['Dr. Lane', '', 'lane@example.edu', 'Office 210-B']
+        .concat(answers(function () { return true; }))
+        .concat([1, 0, 'Tue 13:00-14:00', 'Office hours'])
+    ]);
+  }
+
+  TS.csv = {
+    parseRows: parseRows,
+    parseAvailability: parseAvailability,
+    exportTutors: exportTutors,
+    importTutors: importTutors,
+    templateCsv: templateCsv
+  };
+})(typeof window !== 'undefined' ? window : globalThis);

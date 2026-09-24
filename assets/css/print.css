@@ -1,0 +1,222 @@
+/* Print / Save-as-PDF rendering.
+   The screen app is hidden entirely and the semantic table takes over, so the
+   PDF Chrome and Edge produce is tagged, selectable and screen-reader
+   navigable rather than a picture of a calendar. */
+
+/* Zero, deliberately. Chrome and Edge draw their own header and footer -- the
+   document title at the top, the page URL at the bottom -- inside whatever the
+   @page margin leaves them, and there is no CSS switch to turn that off. Give
+   them no margin to draw into and the handout comes out clean; the page inset
+   comes back below as padding on the print root. */
+@page {
+  size: letter portrait;
+  margin: 0;
+}
+
+.app-header,
+.toolbar,
+.layout,
+#dialog-root,
+.skip-link { display: none !important; }
+
+/* No bottom inset: each page's section brings its own top one, and a bottom
+   one here would land after whatever ends the document. A listing that runs to
+   the foot of its page would push it onto a blank page of its own. */
+.print-only {
+  display: block !important;
+  padding: 0.4in 0.4in 0;
+}
+
+html, body {
+  background: #fff !important;
+  color: #14181F !important;
+  font-size: 9.5pt;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---- header ------------------------------------------------------------ */
+
+.pv-head {
+  display: flex; align-items: flex-end; gap: 20px;
+  border-bottom: 3px solid #FE5000;
+  padding-bottom: 6px; margin-bottom: 8px;
+}
+.pv-head__main { flex: 1 1 auto; }
+.pv-college {
+  margin: 0; font-size: 8pt; letter-spacing: .14em; text-transform: uppercase;
+  color: #10305F; font-weight: 700;
+}
+.pv-head h1 {
+  margin: 1px 0 0; font-family: Georgia, "Times New Roman", serif;
+  font-size: 15pt; color: #002855;
+}
+.pv-term {
+  margin: 2px 0 0; font-family: Georgia, "Times New Roman", serif;
+  font-size: 11pt; font-weight: 700; color: #10305F;
+}
+.pv-subtitle { margin: 1px 0 0; font-size: 9pt; color: #3A4553; }
+.pv-where { margin: 2px 0 0; font-size: 9.5pt; font-weight: 700; }
+.pv-head__contact { text-align: right; font-size: 8.5pt; line-height: 1.35; }
+.pv-head__contact p { margin: 0; }
+
+/* ---- grid -------------------------------------------------------------- */
+
+.pv-table {
+  width: 100%; border-collapse: collapse; table-layout: fixed;
+  page-break-inside: avoid;
+}
+.pv-table thead th {
+  background: #10305F; color: #fff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10pt; padding: 3px 2px;
+  border: 1px solid #10305F;
+}
+.pv-time-head { width: 60px; }
+.pv-time {
+  width: 60px; text-align: right; padding: 0 4px 0 0;
+  font-size: 7.5pt; line-height: 12px; color: #3A4553; font-weight: 600;
+  white-space: nowrap;
+  vertical-align: top;
+}
+/* A fixed height, not a minimum: the class page works out what fits in a
+   block from it. printview.js sets it per page (rowPxFor), sized to fill a
+   portrait sheet. */
+.pv-table tbody tr { height: var(--pv-row, 14px); }
+.pv-empty { border-bottom: 1px solid #EDF1F6; border-right: 1px solid #DCE3EC; }
+.pv-table tbody tr.pv-hour .pv-empty,
+.pv-table tbody tr.pv-hour .pv-time { border-top: 1px solid #B9C3D1; }
+
+.pv-block {
+  vertical-align: top;
+  border: 1px solid #6B7789;
+  padding: 1px 3px; line-height: 1.1;
+  overflow: hidden;
+}
+.pv-block[data-hatch="1"] {
+  background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.14) 0 4px, transparent 4px 9px);
+}
+.pv-block__name { display: block; font-weight: 700; font-size: 8pt; }
+.pv-block__time { display: block; font-size: 6.5pt; }
+.pv-block__subjects { display: block; font-size: 6.5pt; font-weight: 700; letter-spacing: .02em; }
+.pv-block__room { display: block; font-size: 6.5pt; font-style: italic; }
+
+/* ---- day separation ----
+   A day can run several lanes wide, so the day break needs a rule that is
+   unmistakably heavier than the one between two lanes of the same day, plus a
+   wash on alternating days for the stretches where blocks run edge to edge.
+   These come after .pv-block: its border shorthand would otherwise win. */
+.pv-table .pv-dayend { border-right: 2.5pt solid #10305F; }
+.pv-table thead th.pv-dayend { border-right: 2.5pt solid #fff; }
+.pv-table .pv-time { border-right: 2.5pt solid #10305F; }
+.pv-day-alt.pv-empty { background: #F2F6FB; }
+
+/* ---- important notes --------------------------------------------------- */
+
+.pv-notes {
+  margin-top: 5px; padding: 4px 7px;
+  border: 1px solid #10305F; border-left: 4px solid #FE5000;
+  page-break-inside: avoid;
+}
+.pv-notes h2 {
+  font-family: Georgia, "Times New Roman", serif; font-size: 9pt;
+  margin: 0 0 1px; color: #002855;
+}
+.pv-notes p { margin: 0; font-size: 8pt; line-height: 1.3; }
+
+/* ---- footer ------------------------------------------------------------ */
+
+.pv-foot {
+  display: flex; gap: 16px; align-items: flex-start;
+  margin-top: 5px; padding-top: 4px; border-top: 1px solid #B9C3D1;
+  page-break-inside: avoid;
+}
+.pv-qr .qr-svg { width: 80px; height: 80px; border: 1px solid #B9C3D1; }
+.pv-qr__text { font-size: 7.5pt; line-height: 1.3; max-width: 190px; }
+.pv-qr__text p { margin: 0 0 1px; }
+
+.pv-legend { flex: 1 1 auto; }
+.pv-legend h2 { font-size: 9pt; margin: 0 0 3px; font-family: Georgia, serif; }
+.pv-legend ul {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 7.5pt;
+}
+.pv-legend li { display: flex; align-items: center; gap: 5px; }
+.pv-swatch { display: inline-block; width: 16px; height: 10px; border: 1px solid #6B7789; }
+.pv-legend__subjects { color: #3A4553; font-weight: 700; font-size: 7pt; }
+.pv-legend__room { color: #3A4553; font-style: italic; font-size: 7pt; }
+
+/* ---- coverage by class -------------------------------------------------
+   Page one over again on a sheet of its own, with the week read the other way
+   round: one lane per class rather than per tutor, so a student can find their
+   class rather than having to know which tutor teaches it. */
+
+.pv-coverage {
+  /* The page inset above is the print root's padding, which lands once at the
+     top of page one; this page is its own sheet and needs its own. */
+  padding-top: 0.4in;
+  page-break-before: always;
+}
+/* A class block carries a short code rather than a name, so the tutors under
+   it are what the width is actually spent on. */
+.pv-block__who { display: block; font-size: 6.5pt; line-height: 1.15; }
+/* Where the tutors change inside a class block: a faint rule at that hour, and
+   the new stretch's hours and names under it. */
+/* Exactly as tall as the rows the block spans (set in printview.js), so its
+   text can never stretch them: the grid stays to scale. */
+.pv-run { position: relative; overflow: hidden; }
+.pv-nowrap { white-space: nowrap; }
+/* A stretch is boxed to its own hours. printview.js has already worked out
+   how many whole lines of names fit alongside the class code and the time,
+   and the names are clamped to that. */
+.pv-seg { position: absolute; left: 0; right: 0; overflow: hidden; }
+.pv-seg > .pv-block__who {
+  display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+  line-height: 10px;
+}
+.pv-seg > .pv-block__time { line-height: 10px; }
+.pv-seg--after { border-top: 1px solid rgba(20, 24, 31, .22); padding-top: 1px; }
+
+/* ---- text listing ------------------------------------------------------ */
+
+/* The listing is a narrow list on a letter page, so it runs in two columns
+   -- one page of the week rather than one and a half. Balanced, so a week that
+   fits on one page splits evenly rather than running the first column to the
+   foot of the sheet. */
+.pv-listing {
+  /* The page inset above is the print root's padding, which lands once at the
+     top of page one; the listing opens page two and needs its own. */
+  padding-top: 0.4in;
+  page-break-before: always;
+  /* The inset at the foot of every page it runs onto, not just its last:
+     cloned, the padding is kept clear on each page and the columns break
+     above it, so it never needs a page of its own. */
+  padding-bottom: 0.4in;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  font-size: 9pt;
+  column-count: 2;
+  column-gap: 26px;
+  column-fill: balance;
+}
+.pv-listing h2 {
+  font-family: Georgia, serif; font-size: 13pt; color: #002855; margin: 0 0 6px;
+  column-span: all;
+}
+.pv-listing__day {
+  break-inside: avoid; page-break-inside: avoid;
+}
+.pv-listing h3 {
+  font-family: Georgia, serif; font-size: 10.5pt; margin: 8px 0 2px;
+  border-bottom: 1px solid #B9C3D1;
+}
+.pv-listing__day:first-child h3 { margin-top: 0; }
+.pv-listing ul { margin: 0; padding-left: 16px; }
+.pv-listing li { margin-bottom: 0; line-height: 1.35; }
