@@ -230,8 +230,7 @@
         var textW = bw - 6;
         pdf.setTextColor(INK[0], INK[1], INK[2]);
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(7.5);
-        pdf.text(truncate(pdf, run.label, textW), textX, by + 8);
+        pdf.text(fitText(pdf, run.label, textW, [7.5, 6.5, 6]), textX, by + 8);
 
         // The first stretch starts under the class code; the rest under
         // their rule.
@@ -285,8 +284,9 @@
     var dash = range.indexOf('–');
     var timeLines = !room ? []
       : pdf.getTextWidth(range) <= width ? [range]
-      : room >= 3 && dash !== -1
-        ? [truncate(pdf, range.slice(0, dash + 1), width), truncate(pdf, range.slice(dash + 1), width)]
+      : room >= 3 && dash !== -1 && pdf.getTextWidth(range.slice(0, dash + 1)) <= width &&
+          pdf.getTextWidth(range.slice(dash + 1)) <= width
+        ? [range.slice(0, dash + 1), range.slice(dash + 1)]
         : [fitRange(pdf, seg.startSlot, seg.endSlot, width)];
 
     var nameRoom = room - timeLines.length;

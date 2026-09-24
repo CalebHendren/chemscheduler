@@ -105,6 +105,7 @@ html, body {
   background-image: repeating-linear-gradient(45deg, rgba(0,0,0,.14) 0 4px, transparent 4px 9px);
 }
 .pv-block__name { display: block; font-weight: 700; font-size: 8pt; }
+.pv-block__name--small { font-size: 6.5pt; }
 .pv-block__time { display: block; font-size: 6.5pt; }
 .pv-block__subjects { display: block; font-size: 6.5pt; font-weight: 700; letter-spacing: .02em; }
 .pv-block__room { display: block; font-size: 6.5pt; font-style: italic; }
@@ -188,6 +189,9 @@ html, body {
 .pv-seg > .pv-block__who {
   display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
   line-height: 10px;
+  /* A name wider than a narrow lane wraps inside itself rather than being
+     cut off at the lane's edge, as the downloaded PDF does. */
+  overflow-wrap: anywhere;
 }
 .pv-seg > .pv-block__time { line-height: 10px; }
 .pv-seg--after { border-top: 1px solid rgba(20, 24, 31, .22); padding-top: 1px; }

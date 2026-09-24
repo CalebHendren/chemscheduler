@@ -197,10 +197,24 @@
   // at spaces the way the browser will.
   var NAME_CHAR_PX = 4.6;
 
+  // A class code at 8pt bold. Wider than the lane -- three lanes to a day on a
+  // portrait page with Friday on it -- and it steps down to 6.5pt rather than
+  // lose a letter.
+  var CODE_CHAR_PX = 7.2;
+
   function nameLinesNeeded(text, width) {
     var lines = 1, used = 0;
     text.split(' ').forEach(function (word) {
       var w = word.length * NAME_CHAR_PX;
+      // A name wider than the lane breaks inside itself (print.css), on a
+      // line of its own and as many more as it takes.
+      if (w > width) {
+        if (used) lines++;
+        var whole = Math.ceil(w / width);
+        lines += whole - 1;
+        used = w - (whole - 1) * width;
+        return;
+      }
       var add = used ? w + NAME_CHAR_PX : w;
       if (used && used + add > width) { lines++; used = w; } else used += add;
     });
@@ -238,17 +252,20 @@
     // on its hour however tall the rows come out.
     var pct = function (slots) { return (100 * slots / rows).toFixed(3) + '%'; };
     function layout(seg, i) {
+      // The first stretch shares its box with the class code; each later one
+      // starts under its rule (.pv-seg--after, 1px border and 1px padding).
       var lines = Math.floor(((seg.endSlot - seg.startSlot) * rowPx - 3 -
-        (i === 0 ? LABEL_PX : 0)) / LINE_PX);
+        (i === 0 ? LABEL_PX : 2)) / LINE_PX);
 
       var full = U.formatRange(seg.startSlot, seg.endSlot);
       var range = full.split('–');
       var out = { text: namesOf(seg.tutorIds, labels).join(', ') || 'unstaffed' };
       if (fitsOneLine(full, width)) {
         out.time = esc(full); out.timeLines = 1;
-      } else if (lines >= 3) {
+      } else if (lines >= 3 && fitsOneLine(range[0] + '–', width) && fitsOneLine(range[1], width)) {
         // Either end stays whole: "9:00 AM-" over "4:00 PM". Only with a line
-        // left for names; otherwise the short form keeps both on the page.
+        // left for names, and only where each end fits its line; otherwise the
+        // short form keeps both on the page.
         out.time = '<span class="pv-nowrap">' + esc(range[0]) + '–</span>' +
           '<span class="pv-nowrap">' + esc(range[1]) + '</span>';
         out.timeLines = 2;
@@ -260,6 +277,7 @@
       return out;
     }
 
+    var small = run.label.length * CODE_CHAR_PX > width;
     var merged = U.mergeCrampedSegments(run.segments, function (seg, i) {
       return layout(seg, i).fits;
     });
@@ -273,7 +291,8 @@
 
       return '<div class="pv-seg' + (i ? ' pv-seg--after' : '') + '" style="top:' +
           pct(seg.startSlot - run.startSlot) + ';height:' + pct(seg.endSlot - seg.startSlot) + '">' +
-        (i === 0 ? '<span class="pv-block__name">' + esc(run.label) + '</span>' : '') +
+        (i === 0 ? '<span class="pv-block__name' + (small ? ' pv-block__name--small' : '') + '">' +
+          esc(run.label) + '</span>' : '') +
         names + '<span class="pv-block__time">' + time + '</span>' +
         '</div>';
     }).join('');
