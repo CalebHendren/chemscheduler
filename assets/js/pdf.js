@@ -30,6 +30,13 @@
    * "Natha..." is no name at all: the text steps down through `sizes` until it
    * fits, and is only cut short at the smallest. Leaves the font at that size.
    */
+  /* The sizes a block's text starts at, then the ones it steps down to where a
+   * lane is too narrow for it: first the size the handout used before its text
+   * was enlarged, then one smaller still. */
+  var NAME_PT = [8.5, 7.5, 6.5];   // a tutor's name, bold
+  var CODE_PT = [8.5, 7.5, 6.5, 6]; // a class code, bold
+  var SMALL_PT = [7, 6, 5.5];       // times, class lists and the names in a class block
+
   function fitText(pdf, text, width, sizes) {
     for (var i = 0; i < sizes.length; i++) {
       pdf.setFontSize(sizes[i]);
@@ -85,7 +92,7 @@
     pdf.setFillColor(NAVY[0], NAVY[1], NAVY[2]);
     pdf.rect(g.margin, g.gridTop, g.pageW - g.margin * 2, g.headH, 'F');
     pdf.setFont('times', 'bold');
-    pdf.setFontSize(10);
+    pdf.setFontSize(11);
     pdf.setTextColor(255, 255, 255);
     g.days.forEach(function (day, p) {
       pdf.text(U.DAY_NAMES[day], g.margin + g.gutterW + g.colW * p + g.colW / 2, g.gridTop + 11, { align: 'center' });
@@ -101,7 +108,7 @@
 
     pdf.setLineWidth(0.4);
     pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(6.5);
+    pdf.setFontSize(7.5);
     for (var slot = g.win.start; slot <= g.win.end; slot++) {
       var y = g.bodyTop + (slot - g.win.start) * g.rowH;
       var onHour = U.slotStartMinutes(slot) % 60 === 0;
@@ -112,7 +119,7 @@
         // The first label sits just under its line, where the day band above
         // would otherwise cover it.
         pdf.text(U.formatMinutes(U.slotStartMinutes(slot)), g.margin + g.gutterW - 4,
-          slot === g.win.start ? y + 6 : y + 3, { align: 'right' });
+          slot === g.win.start ? y + 7 : y + 3, { align: 'right' });
       }
     }
   }
@@ -167,28 +174,28 @@
         // Office hours say where they are held; a block too short for a line
         // of its own carries the room beside its time instead.
         var room = U.ownRoom(tutor);
-        var tall = bh > 28;
-        var roomLine = !!room && bh > 36;
+        var tall = bh > 30;
+        var roomLine = !!room && bh > 39;
         pdf.setTextColor(INK[0], INK[1], INK[2]);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(fitText(pdf, labels[tutor.id], textW, [7.5, 6.5, 6]), textX, by + 8);
+        pdf.text(fitText(pdf, labels[tutor.id], textW, NAME_PT), textX, by + 9);
 
-        if (bh > 20) {
+        if (bh > 22) {
           pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(6);
+          pdf.setFontSize(SMALL_PT[0]);
           var when = fitRange(pdf, a.startSlot, a.endSlot, textW);
           if (room && !roomLine) {
-            when = fitText(pdf, U.formatRange(a.startSlot, a.endSlot) + ' · ' + room, textW, [6, 5.5, 5]);
+            when = fitText(pdf, U.formatRange(a.startSlot, a.endSlot) + ' · ' + room, textW, SMALL_PT);
           }
-          pdf.text(when, textX, by + 16);
+          pdf.text(when, textX, by + 17.5);
         }
         if (tall) {
           var shorts = U.maskToShort(U.subjectMask(tutor.subjects)).join(' · ') || '—';
           pdf.setFont('helvetica', 'bold');
-          pdf.text(fitText(pdf, shorts, textW, [6, 5.5, 5]), textX, by + 24);
+          pdf.text(fitText(pdf, shorts, textW, SMALL_PT), textX, by + 26);
           if (roomLine) {
             pdf.setFont('helvetica', 'italic');
-            pdf.text(fitText(pdf, room, textW, [6, 5.5, 5]), textX, by + 32);
+            pdf.text(fitText(pdf, room, textW, SMALL_PT), textX, by + 34.5);
           }
         }
       });
@@ -230,7 +237,7 @@
         var textW = bw - 6;
         pdf.setTextColor(INK[0], INK[1], INK[2]);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(fitText(pdf, run.label, textW, [7.5, 6.5, 6]), textX, by + 8);
+        pdf.text(fitText(pdf, run.label, textW, CODE_PT), textX, by + 9);
 
         // The first stretch starts under the class code; the rest under
         // their rule.
@@ -238,7 +245,7 @@
           var segTop = g.bodyTop + (seg.startSlot - g.win.start) * g.rowH + 0.5;
           return {
             rule: segTop,
-            top: i === 0 ? by + 16 : segTop + 7,
+            top: i === 0 ? by + 18 : segTop + 8,
             bottom: g.bodyTop + (seg.endSlot - g.win.start) * g.rowH - 0.5
           };
         };
@@ -266,7 +273,7 @@
    * one line -- and the names wrap into whatever is left above it, cut with
    * an ellipsis or left out when there is nothing left.
    */
-  var SEG_LINE = 7;
+  var SEG_LINE = 8;
 
   // What a stretch would print, and whether every name in it fits.
   function segmentLines(pdf, seg, labels, width, top, bottom) {
@@ -278,7 +285,7 @@
     }));
 
     pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(6);
+    pdf.setFontSize(SMALL_PT[0]);
 
     var range = U.formatRange(seg.startSlot, seg.endSlot);
     var dash = range.indexOf('–');
@@ -288,22 +295,38 @@
           pdf.getTextWidth(range.slice(dash + 1)) <= width
         ? [range.slice(0, dash + 1), range.slice(dash + 1)]
         : [fitRange(pdf, seg.startSlot, seg.endSlot, width)];
+    var timePt = pdf.getFontSize();
 
     var nameRoom = room - timeLines.length;
-    var names = pdf.splitTextToSize(who.join(', ') || 'unstaffed', width);
+    // A name too wide for the lane at full size is set smaller rather than
+    // broken in two: the size the handout used before, then one smaller.
+    var text = who.join(', ') || 'unstaffed';
+    var namePt = SMALL_PT[SMALL_PT.length - 1];
+    for (var k = 0; k < SMALL_PT.length; k++) {
+      pdf.setFontSize(SMALL_PT[k]);
+      var fitsLane = text.split(' ').every(function (w) { return pdf.getTextWidth(w) <= width; });
+      if (fitsLane) { namePt = SMALL_PT[k]; break; }
+    }
+    pdf.setFontSize(namePt);
+    var names = pdf.splitTextToSize(text, width);
     var fits = names.length <= nameRoom;
     if (!fits) {
       names = names.slice(0, Math.max(0, nameRoom));
       if (nameRoom > 0) names[nameRoom - 1] = truncate(pdf, names[nameRoom - 1] + '…', width);
     }
-    return { lines: names.concat(timeLines), fits: fits };
+    return { names: names, times: timeLines, namePt: namePt, timePt: timePt, fits: fits };
   }
 
   function drawSegmentText(pdf, seg, labels, x, top, width, bottom) {
-    var lines = segmentLines(pdf, seg, labels, width, top, bottom).lines;
+    var fit = segmentLines(pdf, seg, labels, width, top, bottom);
     pdf.setTextColor(INK[0], INK[1], INK[2]);
-    lines.forEach(function (line, i) {
+    pdf.setFontSize(fit.namePt);
+    fit.names.forEach(function (line, i) {
       pdf.text(line, x, top + i * SEG_LINE);
+    });
+    pdf.setFontSize(fit.timePt);
+    fit.times.forEach(function (line, i) {
+      pdf.text(line, x, top + (fit.names.length + i) * SEG_LINE);
     });
   }
 
@@ -315,8 +338,15 @@
   function fitRange(pdf, startSlot, endSlot, width) {
     var full = U.formatRange(startSlot, endSlot);
     if (pdf.getTextWidth(full) <= width) return full;
+    // The short form, stepping down a size or two before the end time goes.
     var compact = U.formatRangeCompact(startSlot, endSlot);
-    if (pdf.getTextWidth(compact) <= width) return compact;
+    var start = pdf.getFontSize();
+    var sizes = [start].concat(SMALL_PT.filter(function (pt) { return pt < start; }));
+    for (var i = 0; i < sizes.length; i++) {
+      pdf.setFontSize(sizes[i]);
+      if (pdf.getTextWidth(compact) <= width) return compact;
+    }
+    pdf.setFontSize(start);
     var from = U.formatMinutes(U.slotStartMinutes(startSlot));
     if (pdf.getTextWidth(from) <= width) return from;
     return truncate(pdf, U.formatMinutes(U.slotStartMinutes(startSlot), { omitSuffix: true }), width);
@@ -329,20 +359,26 @@
     var cols = state.tutors.length <= 5 ? 1 : 2;
     var rows = Math.ceil(state.tutors.length / cols);
     var colW = width / cols;
-    pdf.setFontSize(7);
+    pdf.setFontSize(8);
+    // The class list starts just past the longest name, so it has the rest of
+    // the column.
+    pdf.setFont('helvetica', 'bold');
+    var nameW = Math.min(66, Math.max.apply(null, state.tutors.map(function (t) {
+      return pdf.getTextWidth(labels[t.id]);
+    }).concat([0])));
     state.tutors.forEach(function (t, i) {
       var lx = legendX + Math.floor(i / rows) * colW;
-      var ly = legendY + (i % rows) * 12;
+      var ly = legendY + (i % rows) * 13;
       drawSwatch(pdf, U.blockColors(t.colorIndex, false), lx, ly);
 
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(INK[0], INK[1], INK[2]);
-      pdf.text(truncate(pdf, labels[t.id], 64), lx + 20, ly);
+      pdf.text(truncate(pdf, labels[t.id], nameW), lx + 20, ly);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
       var what = (U.maskToShort(U.subjectMask(t.subjects)).join(' · ') || '—') +
         (U.ownRoom(t) ? ', in ' + U.ownRoom(t) : '');
-      pdf.text(truncate(pdf, what, colW - 20 - 68), lx + 20 + 68, ly);
+      pdf.text(truncate(pdf, what, colW - 30 - nameW), lx + 28 + nameW, ly);
     });
   }
 
@@ -352,27 +388,27 @@
   function drawClassLegend(pdf, state, legendX, legendY) {
     var lanes = U.coverageLanes();
     var totals = U.coverageLaneHours(U.coverageRuns(state.assignments, state.tutors));
-    pdf.setFontSize(7);
+    pdf.setFontSize(8);
     lanes.forEach(function (lane, i) {
       var col = Math.floor(i / 4);
       var rowI = i % 4;
       var lx = legendX + col * 175;
-      var ly = legendY + rowI * 12;
+      var ly = legendY + rowI * 13;
       drawSwatch(pdf, U.laneColors(lane, false), lx, ly);
 
       pdf.setFont('helvetica', 'bold');
       pdf.setTextColor(INK[0], INK[1], INK[2]);
-      pdf.text(truncate(pdf, U.laneLabel(lane), 100), lx + 20, ly);
+      pdf.text(truncate(pdf, U.laneLabel(lane), 92), lx + 20, ly);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-      pdf.text(truncate(pdf, U.hoursLabel(totals[i]) + ' a week', 48), lx + 20 + 105, ly);
+      pdf.text(truncate(pdf, U.hoursLabel(totals[i]) + ' a week', 56), lx + 20 + 97, ly);
     });
   }
 
   function drawListing(pdf, state, labels, pageW, pageH, margin) {
     var y2 = margin + 14;
     pdf.setFont('times', 'bold');
-    pdf.setFontSize(15);
+    pdf.setFontSize(16);
     pdf.setTextColor(0, 40, 85);
     pdf.text('Schedule listing', margin, y2);
     y2 += 8;
@@ -389,18 +425,18 @@
       y2 += 16;
       if (y2 > pageH - margin - 20) { pdf.addPage(); y2 = margin + 20; }
       pdf.setFont('times', 'bold');
-      pdf.setFontSize(11);
+      pdf.setFontSize(12);
       pdf.setTextColor(0, 40, 85);
       pdf.text(U.DAY_NAMES[dl], margin, y2);
       pdf.setDrawColor(RULE[0], RULE[1], RULE[2]);
       pdf.line(margin, y2 + 3, pageW - margin, y2 + 3);
 
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
+      pdf.setFontSize(10);
       pdf.setTextColor(INK[0], INK[1], INK[2]);
       blocks.forEach(function (a) {
         var tutor = TS.store.getTutor(a.tutorId);
-        y2 += 12;
+        y2 += 13.5;
         if (y2 > pageH - margin - 10) { pdf.addPage(); y2 = margin + 20; }
         pdf.text(
           labels[tutor.id] + ', ' + U.formatRange(a.startSlot, a.endSlot) + ' — ' +
@@ -412,7 +448,7 @@
     }
     if (!anyRows) {
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(10);
+      pdf.setFontSize(11);
       pdf.setTextColor(INK[0], INK[1], INK[2]);
       pdf.text('No shifts are scheduled yet.', margin, y2 + 18);
     }
@@ -480,7 +516,7 @@
 
     /* ---- header ---- */
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(7.5);
+    pdf.setFontSize(8);
     pdf.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
     pdf.text('CHATTANOOGA STATE COMMUNITY COLLEGE', margin, margin + 6);
 
@@ -493,28 +529,28 @@
     // look alike, and one posted for the wrong half is easy to miss.
     var whereY = margin + 40;
     pdf.setFont('times', 'bold');
-    pdf.setFontSize(12);
+    pdf.setFontSize(13);
     pdf.setTextColor(NAVY[0], NAVY[1], NAVY[2]);
     pdf.text([s.term, state.periods[state.activePeriod].label].filter(Boolean).join(' · '),
       margin, whereY);
-    whereY += 12;
+    whereY += 13;
     if (s.effective) {
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
+      pdf.setFontSize(10);
       pdf.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
       pdf.text(s.effective, margin, whereY);
-      whereY += 11;
+      whereY += 12;
     }
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(9);
+    pdf.setFontSize(10);
     pdf.setTextColor(INK[0], INK[1], INK[2]);
     pdf.text(s.location, margin, whereY);
 
     pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(8.5);
+    pdf.setFontSize(9.5);
     if (s.contactName) pdf.text(s.contactName, pageW - margin, margin + 14, { align: 'right' });
     if (s.contactEmail) {
-      pdf.text(s.contactEmail, pageW - margin, (s.contactName ? margin + 25 : margin + 14),
+      pdf.text(s.contactEmail, pageW - margin, (s.contactName ? margin + 26 : margin + 14),
         { align: 'right' });
     }
 
@@ -529,12 +565,14 @@
     var gridTop = whereY + 18;
     // The notes band is measured before the grid is laid out, so a long note
     // shortens the grid rather than running off the page.
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
     var noteLines = s.notes
       ? pdf.splitTextToSize(s.notes, pageW - margin * 2 - 12)
       : [];
     // The box is this less the 8 points kept clear above the footer rule, and
     // still clears the last line's descenders.
-    var noteH = noteLines.length ? 24 + noteLines.length * 9 : 0;
+    var noteH = noteLines.length ? 25 + noteLines.length * 10.5 : 0;
 
     var footH = 92 + noteH;
     var gridBottom = pageH - margin - footH;
@@ -576,15 +614,15 @@
       pdf.rect(margin, noteTop, 3, noteH - 8, 'F');
 
       pdf.setFont('times', 'bold');
-      pdf.setFontSize(9.5);
+      pdf.setFontSize(10.5);
       pdf.setTextColor(0, 40, 85);
-      pdf.text('Important notes', margin + 9, noteTop + 11);
+      pdf.text('Important notes', margin + 9, noteTop + 12);
 
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
+      pdf.setFontSize(9);
       pdf.setTextColor(INK[0], INK[1], INK[2]);
       noteLines.forEach(function (line, i) {
-        pdf.text(line, margin + 9, noteTop + 22 + i * 9);
+        pdf.text(line, margin + 9, noteTop + 23.5 + i * 10.5);
       });
     }
 
@@ -602,15 +640,15 @@
     var qrY = footY + 10;
     pdf.setTextColor(INK[0], INK[1], INK[2]);
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(8.5);
+    pdf.setFontSize(9.5);
     pdf.splitTextToSize(s.qrHeading || '', qrTextW).forEach(function (line) {
       pdf.text(line, margin + 72, qrY);
-      qrY += 11;
+      qrY += 12;
     });
     pdf.setFont('helvetica', 'normal');
     pdf.splitTextToSize(s.qrCaption || '', qrTextW).slice(0, 4).forEach(function (line) {
       pdf.text(line, margin + 72, qrY);
-      qrY += 11;
+      qrY += 12;
     });
 
     var legendX = margin + 232;
