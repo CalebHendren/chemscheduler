@@ -86,6 +86,7 @@
     $('qr-book').hidden = !s.qrUrl;
 
     $('include-listing').checked = !!s.includeListing;
+    $('print-periods').value = TS.store.printPeriods();
   }
 
   function renderStats(state) {
@@ -134,7 +135,8 @@
     settings: 'a settings change', 'import-csv': 'a CSV import',
     'import': 'an import', replace: 'loading a file', theme: 'a theme change',
     listing: 'turning the text listing on or off',
-    period: 'switching to the other 7 weeks', 'copy-period': 'copying the other 7 weeks'
+    period: 'switching to the other 7 weeks', 'copy-period': 'copying the other 7 weeks',
+    dates: 'a change to the 7-week dates'
   };
 
   function renderUndo() {
@@ -299,7 +301,7 @@
     if (fresh) {
       notice('The ' + TS.store.activePeriodLabel() + ' starts as a copy of the ' +
         state.periods[1 - index].label + '. Change whatever is different; the other ' +
-        'half is not touched. Set its own effective dates under Schedule settings.', 'info');
+        'half is not touched. Its dates are under Schedule settings.', 'info');
     }
   }
 
@@ -604,9 +606,6 @@
     { group: 'Handout' },
     { key: 'title', label: 'Schedule title', type: 'text' },
     { key: 'term', label: 'Semester', type: 'text', placeholder: 'Fall 2026' },
-    { key: 'effective', label: 'Effective dates', type: 'text', placeholder: 'Aug 24 – Dec 11',
-      hint: 'The first date goes in the saved PDF’s name, after the title: ' +
-        '“… Schedule 8-24-2026”. Left blank, today’s date is used.' },
     { key: 'notes', label: 'Important notes', type: 'textarea',
       placeholder: 'Closures, the last day of tutoring, anything else on the handout' },
     { key: 'location', label: 'Tutoring room', type: 'text',
@@ -647,9 +646,7 @@
         return;
       }
       var ph = f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '';
-      // Each 7 weeks has dates of its own, so the field says whose it is.
-      var label = f.key === 'effective' ? f.label + ', ' + TS.store.activePeriodLabel() : f.label;
-      html += '<div class="field"><label for="set-' + f.key + '">' + esc(label) + '</label>' +
+      html += '<div class="field"><label for="set-' + f.key + '">' + esc(f.label) + '</label>' +
         (f.type === 'textarea'
           ? '<textarea id="set-' + f.key + '" data-setting="' + f.key + '" rows="4"' + ph + '>' +
               esc(s[f.key]) + '</textarea>'
@@ -659,6 +656,23 @@
         '</div>';
     });
     html += '</fieldset>';
+
+    // Both halves' dates, whichever half is on screen.
+    html += '<fieldset><legend>7-week dates</legend>' +
+      state.periods.map(function (p, i) {
+        var field = function (edge, label) {
+          var id = 'set-period-' + i + '-' + edge;
+          return '<div class="field"><label for="' + id + '">' + label + '</label>' +
+            '<input type="date" id="' + id + '" data-period="' + i + '" data-edge="' + edge +
+            '" value="' + esc(p[edge]) + '"></div>';
+        };
+        return '<div class="period-dates"><div class="period-dates__name">' + esc(p.label) + '</div>' +
+          '<div class="grid-2">' + field('start', 'Starts') + field('end', 'Ends') + '</div></div>';
+      }).join('') +
+      '<p class="field__hint">Printed on each half’s handout, and the start date names the saved ' +
+      'PDF. Once the 1st 7 weeks has ended, the schedule opens on the 2nd and prints only the ' +
+      '2nd unless you pick otherwise.</p>' +
+      '</fieldset>';
 
     html += '<fieldset><legend>Classes</legend>' +
       '<p class="field__hint" style="margin-top:0">What the tutors are here to help with. ' +
@@ -739,6 +753,17 @@
       var numKey = t.getAttribute('data-setting-num');
       var boolKey = t.getAttribute('data-setting-bool');
       var classKey = t.getAttribute('data-class-key');
+      var period = t.getAttribute('data-period');
+
+      if (period !== null) {
+        var half = TS.store.state.periods[+period];
+        half[t.getAttribute('data-edge')] = t.value;
+        TS.store.commit('dates');
+        if (U.parseIso(half.start) && U.parseIso(half.end) && half.end < half.start) {
+          notice('The ' + half.label + ' ends before it starts. Check its dates under Schedule settings.', 'warn');
+        }
+        return;
+      }
 
       if (classKey) {
         // The key stays put while the wording changes, so renaming a class
@@ -867,6 +892,12 @@
     $('btn-cancel').addEventListener('click', cancelOptimize);
     $('btn-add-tutor').addEventListener('click', addTutor);
     $('btn-email-all').addEventListener('click', emailAll);
+    // Not a change to the schedule, so not saved or undoable: which halves to
+    // print, until the page is closed.
+    $('print-periods').addEventListener('change', function (e) {
+      TS.store.setPrintPeriods(e.target.value);
+      TS.printview.render($('print-view'), TS.store.state);
+    });
     $('include-listing').addEventListener('change', function (e) {
       TS.store.state.settings.includeListing = e.target.checked;
       TS.store.commit('listing');
@@ -890,7 +921,7 @@
     var screenTitle = null;
     root.addEventListener('beforeprint', function () {
       if (screenTitle === null) screenTitle = doc.title;
-      doc.title = U.handoutName(TS.store.state.settings);
+      doc.title = TS.store.printName();
     });
     root.addEventListener('afterprint', function () {
       if (screenTitle !== null) doc.title = screenTitle;
@@ -996,6 +1027,8 @@
 
   function boot() {
     var loaded = TS.store.load();
+    // The half in effect today, once the dates say which that is.
+    var moved = loaded && TS.store.openPeriodInEffect();
     $('app-version').textContent = 'Version ' + U.VERSION + '.';
     TS.theme.init(TS.store.state.settings.theme);
     $('theme-select').value = TS.store.state.settings.theme;
@@ -1005,6 +1038,12 @@
 
     wire();
     renderAll();
+
+    if (moved) {
+      var st = TS.store.state;
+      notice('Showing the ' + TS.store.activePeriodLabel() + ': the ' + st.periods[0].label +
+        ' ended ' + U.dateRangeLabel('', st.periods[0].end).replace('Through ', '') + '.', 'info');
+    }
 
     if (!TS.store.storageAvailable()) {
       var hint = $('save-hint');

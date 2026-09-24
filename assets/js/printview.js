@@ -401,21 +401,28 @@
       buildFoot(state, legendHtml);
   }
 
-  function render(container, state) {
-    var labels = U.displayNames(state.tutors);
-    var runs = U.coverageRuns(state.assignments, state.tutors);
-    var listing = state.settings.includeListing ? buildListing(state, labels) : '';
-
-    // Printed double sided, the two calendars are the two faces of one sheet.
-    // With the listing on, it follows each calendar instead, so each sheet
-    // carries a calendar on one face and the listing on the other.
-    container.innerHTML =
-      buildHandout(state, labels, buildTable(state, labels), buildLegend(state, labels)) +
+  /* One half's pages. Printed double sided, the two calendars are the two
+   * faces of one sheet. With the listing on, it follows each calendar instead,
+   * so each sheet carries a calendar on one face and the listing on the other.
+   */
+  function renderPeriod(view) {
+    var labels = U.displayNames(view.tutors);
+    var runs = U.coverageRuns(view.assignments, view.tutors);
+    var listing = view.settings.includeListing ? buildListing(view, labels) : '';
+    return '<section class="pv-period">' +
+      buildHandout(view, labels, buildTable(view, labels), buildLegend(view, labels)) +
       listing +
       '<section class="pv-coverage">' +
-        buildHandout(state, labels, buildSubjectTable(state, labels, runs), buildSubjectLegend(runs)) +
+        buildHandout(view, labels, buildSubjectTable(view, labels, runs), buildSubjectLegend(runs)) +
       '</section>' +
-      listing;
+      listing +
+      '</section>';
+  }
+
+  // Both 7 weeks by default, one after the other, or whichever one the Print
+  // choice asks for.
+  function render(container) {
+    container.innerHTML = TS.store.printViews().map(renderPeriod).join('');
   }
 
   TS.printview = { render: render };

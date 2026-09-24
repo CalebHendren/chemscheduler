@@ -115,16 +115,23 @@ working on: **1st 7 weeks** or **2nd 7 weeks**.
   on — editing one never touches the other.
 - **Copy the 1st 7 weeks** (beside the switch, on the 2nd) starts the 2nd over from the 1st, if
   it has drifted. It asks first, and **Ctrl+Z** undoes it.
-- **Each half has its own Effective dates.** The setting is labelled with the half it belongs to.
+- **Each half has its own start and end dates**, both halves' under **Schedule settings →
+  7-week dates**. The handout prints them — *Aug 24 – Oct 9, 2026* — and the start date names
+  the saved PDF.
+- **The schedule opens on the half in effect.** Once the day after the 1st's end date has come,
+  opening the schedule shows the 2nd 7 weeks, and says so; before it, the 1st. With no end date
+  set, it opens on whichever half was left on screen.
 - **Everything else is shared** — the roster, the classes, the rules, the notes.
 - **Everything you do is to the half on screen.** Auto-optimize, Clear schedule, Lock all, the
   stats and **Uncovered time** all work on it alone. Removing a tutor, or narrowing their
   availability, is true of the whole term, so it clears their shifts from both.
-- **The handout is the half on screen**, and says which under the semester — *Fall 2026 · 2nd 7
-  weeks* — so the two posted sheets cannot be mixed up.
+- **The handout carries both halves** until the 1st is over — see
+  [Printing and PDFs](#printing-and-pdfs) — and each half's pages say which it is under the
+  semester, *Fall 2026 · 2nd 7 weeks*, so the posted sheets cannot be mixed up.
 
-One **Export JSON** file carries both halves and which one was open. A file from before the
-halves, or from the Life Science scheduler, loads as the 1st 7 weeks.
+One **Export JSON** file carries both halves, their dates, and which one was open. A file from
+before the halves, or from the Life Science scheduler, loads as the 1st 7 weeks, and the first
+date in its old free-text effective dates becomes the 1st's start.
 
 ## Office hours in another room
 
@@ -292,25 +299,32 @@ Two buttons, for two different needs:
 
 - **Print / Save as PDF** — the one to use for anything you hand out or post. It prints from a
   real HTML table with proper row and column headers, so the PDF Chrome and Edge produce has
-  selectable text, keeps its table structure, and carries a document language. Two pages: the
-  calendar, the notes, the QR code and the legend on page 1, and **Coverage by class** on
-  page 2 — printed double sided, one sheet with a calendar on each face.
+  selectable text, keeps its table structure, and carries a document language. Each 7 weeks is
+  two pages: the calendar, the notes, the QR code and the legend, then **Coverage by class** —
+  printed double sided, one sheet with a calendar on each face.
 - **Download PDF** — one click, no print dialog, drawn directly with jsPDF. Same pages,
   same portrait layout and real text (nothing is a screenshot), but jsPDF does not emit a
   tagged structure tree, so it is the convenience option rather than the accessible one.
 
-Both print the 7 weeks on screen. Either way the file is named for the schedule and the day it
-takes effect — *Chemistry Tutoring Schedule 8-24-2026* — from the first date in that half's
-**Effective dates** under **Schedule settings**.
-Any usual way of writing it works (`Aug 24 – Dec 11`, `8/24/2026 - 12/11/2026`, `2026-08-24`);
-a date with no year takes the one in the semester name. With no effective date, today's date is
-used. Print / Save as PDF gets the name by putting it in the page title while printing, which is
-what Chrome and Edge offer as the file name.
+The **Print** choice beside the buttons says which 7 weeks go in the document:
+
+- **Both 7 weeks** — the default while the 1st 7 weeks is under way: one document, the 1st's two
+  pages then the 2nd's, four pages in all. A 2nd 7 weeks never opened prints as the copy of
+  the 1st it would open as.
+- **2nd 7 weeks only** — the default once the 1st has ended (the day after its end date under
+  **7-week dates**), since a sheet for weeks already gone is not one to post.
+- **1st 7 weeks only** — the 1st alone.
+
+A choice lasts until the page is closed, so the next visit starts from the dates again. Either
+way the file is named for the schedule and the day the first half in it starts — *Chemistry
+Tutoring Schedule 8-24-2026* — or today, with no start date set. Print / Save as PDF gets the
+name by putting it in the page title while printing, which is what Chrome and Edge offer as the
+file name.
 
 Tick **Include text listing** beside the two buttons to add a plain-text listing of every
-shift, in two columns, after each calendar. That makes four pages — calendar, listing, coverage
-by class, listing — so a double-sided print gives a sheet with a calendar on one face and the
-listing on the other, whichever sheet someone picks up. It is off by default.
+shift, in two columns, after each calendar. That makes four pages a half — calendar, listing,
+coverage by class, listing — so a double-sided print gives a sheet with a calendar on one face and
+the listing on the other, whichever sheet someone picks up. It is off by default.
 
 ### Coverage by class
 
@@ -464,7 +478,7 @@ every color of every palette size, that a generated palette keeps its closest pa
 colorblind reader too and that the assignment does not waste that pair on two tutors sitting
 side by side, CSV round-tripping and parsing (Friday hours skipped with a warning), the class
 list and the bitmask it drives, office hours in another room counting as cover but not against
-the room's limit or the minimum shift, the two 7-week halves (copying, switching, undo across a
+the room's limit or the minimum shift, the two 7-week halves (their dates, which half opens and prints after the 1st ends, copying, switching, undo across a
 switch, both halves in a file, a tutor removed from both), touching shifts joining into one,
 class coverage turning a tutor's shift into one run per class and a segment inside it wherever
 the tutors change, one column per tutor per day, the day and evening caps (including tutors

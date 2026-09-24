@@ -158,6 +158,13 @@ html, body {
    round: one lane per class rather than per tutor, so a student can find their
    class rather than having to know which tutor teaches it. */
 
+/* Each 7 weeks starts a sheet of its own, with the inset the print root only
+   gives the first page. */
+.pv-period + .pv-period {
+  padding-top: 0.4in;
+  page-break-before: always;
+}
+
 .pv-coverage {
   /* The page inset above is the print root's padding, which lands once at the
      top of page one; this page is its own sheet and needs its own. */

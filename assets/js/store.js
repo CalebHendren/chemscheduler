@@ -15,7 +15,6 @@
     return {
       title: 'Chemistry Tutoring Schedule',
       term: 'Fall 2026',
-      effective: '',
       notes: 'No tutoring will be available September 7, October 5–11, or November 23–29, ' +
         'or any time campus is closed. The last day of tutoring for the fall ' +
         'semester is December 10, 2026.',
@@ -49,20 +48,20 @@
   /* ---- the two 7-week halves ----
    * The term runs as two 7-week halves, and a half can have a week of its own
    * -- a tutor whose classes change at the midpoint, say. Each half keeps its
-   * own shifts and its own effective dates; the roster and every other setting
-   * are shared.
+   * own shifts and its own start and end dates (ISO, as a date field gives
+   * them); the roster and every other setting are shared.
    *
-   * The half being worked on lives where a single week always has:
-   * state.assignments and settings.effective. The rest of the app never needs
-   * to know there is another one. The other half waits in state.periods, and
-   * switching swaps the two over. A half whose assignments are null has not
-   * been started, and opens as a copy of the other.
+   * The shifts of the half being worked on live where a single week's always
+   * have: state.assignments. The rest of the app never needs to know there is
+   * another one. The other half's wait in state.periods, and switching swaps
+   * the two over. A half whose assignments are null has not been started, and
+   * opens as a copy of the other.
    */
   var PERIOD_LABELS = ['1st 7 weeks', '2nd 7 weeks'];
 
   function emptyPeriods() {
     return PERIOD_LABELS.map(function (label, i) {
-      return { label: label, effective: '', assignments: i === 0 ? [] : null };
+      return { label: label, start: '', end: '', assignments: i === 0 ? [] : null };
     });
   }
 
@@ -76,9 +75,7 @@
   // Writes the half being worked on back into its place in state.periods, so
   // anything read from there -- a save, an export, undo -- is current.
   function syncPeriod() {
-    var p = state.periods[state.activePeriod];
-    p.assignments = state.assignments;
-    p.effective = state.settings.effective;
+    state.periods[state.activePeriod].assignments = state.assignments;
   }
 
   function copyShifts(list) {
@@ -101,9 +98,75 @@
     // A tutor removed while the other half was on screen leaves nothing behind.
     next.assignments = next.assignments.filter(function (a) { return getTutor(a.tutorId); });
     state.assignments = next.assignments;
-    state.settings.effective = next.effective;
     state.activePeriod = index;
     return true;
+  }
+
+  /* The half in effect on `today`: the 2nd once the day after the 1st's end
+   * date has come, the 1st before it, and null while the 1st has no end date
+   * to go by. */
+  function periodInEffect(today) {
+    var end = state.periods[0].end;
+    if (!U.parseIso(end)) return null;
+    return U.isPast(end, today) ? 1 : 0;
+  }
+
+  /* What the app opens on: the half in effect, whichever was on screen when it
+   * was last closed. Returns whether it moved. Not an undoable change -- it is
+   * where the session starts, not something anyone did. */
+  function openPeriodInEffect(today) {
+    var i = periodInEffect(today);
+    if (i === null || !switchPeriod(i)) return false;
+    clearHistory();
+    save();
+    return true;
+  }
+
+  /* Which halves Print and Download PDF produce: 'both' in one document, or
+   * '0' / '1' for one alone. Unless someone picks otherwise, that is both
+   * until the 1st 7 weeks is over and only the 2nd after -- a sheet for weeks
+   * already gone is not one to post. A pick lasts until the page is closed,
+   * so the next visit starts from the dates again. */
+  var printChoice = null;
+
+  function printPeriods(today) {
+    if (printChoice !== null) return printChoice;
+    return periodInEffect(today) === 1 ? '1' : 'both';
+  }
+
+  function setPrintPeriods(choice) {
+    printChoice = choice === '0' || choice === '1' || choice === 'both' ? choice : null;
+  }
+
+  /* What Print and Download PDF produce: one state-shaped view per half, in
+   * order, each carrying that half's shifts and dates and naming itself as the
+   * active half, so the handout code reads it exactly as it would the half on
+   * screen. A 2nd 7 weeks never opened prints as what it would open as -- a
+   * copy of the 1st -- without anything being written back.
+   */
+  function printViews(today) {
+    syncPeriod();
+    var choice = printPeriods(today);
+    var which = choice === '0' ? [0] : choice === '1' ? [1] : [0, 1];
+    return which.map(function (i) {
+      var settings = {};
+      Object.keys(state.settings).forEach(function (k) { settings[k] = state.settings[k]; });
+      var p = state.periods[i];
+      settings.effective = U.dateRangeLabel(p.start, p.end);
+      settings.startDate = p.start;
+      return {
+        settings: settings,
+        tutors: state.tutors,
+        assignments: state.periods[i].assignments || state.periods[0].assignments || [],
+        periods: state.periods,
+        activePeriod: i
+      };
+    });
+  }
+
+  // The printed file's name, from the first half it carries.
+  function printName(today) {
+    return U.handoutName(printViews(today)[0].settings, today);
   }
 
   // Starts the half being worked on over as a copy of the other one.
@@ -275,29 +338,36 @@
       }).map(normalizeAssignment);
     };
 
+    /* Dates are ISO. Effective dates used to be free text -- they still are in
+     * a file from the Life Science scheduler -- and the first date written in
+     * one is kept as the start. */
+    var term = next.settings.term;
+    var dateFrom = function (iso, text) {
+      if (U.parseIso(iso)) return iso;
+      return text ? U.isoDate(U.effectiveStart(text, term)) : '';
+    };
+
     // A file from before the halves -- or from the Life Science scheduler --
     // is one week, and it becomes the 1st 7 weeks.
     var saved = Array.isArray(obj.periods) ? obj.periods : null;
+    var oldText = obj.settings && typeof obj.settings.effective === 'string' ? obj.settings.effective : '';
     next.periods.forEach(function (p, i) {
-      var from = saved ? saved[i] || {} : (i === 0 ? { assignments: obj.assignments,
-        effective: obj.settings && obj.settings.effective } : {});
-      p.effective = String(from.effective || '');
+      var from = saved ? saved[i] || {} : (i === 0 ? { assignments: obj.assignments, effective: oldText } : {});
+      p.start = dateFrom(from.start, from.effective);
+      p.end = U.parseIso(from.end) ? from.end : '';
       p.assignments = Array.isArray(from.assignments) ? shifts(from.assignments)
         : i === 0 ? [] : null;
     });
     next.activePeriod = saved && next.periods[obj.activePeriod] ? obj.activePeriod | 0 : 0;
 
-    // The half that was open is live in obj.assignments and settings.effective,
-    // which win over the copy filed under periods: that copy is only as fresh
-    // as the last save.
+    // The half that was open is live in obj.assignments, which wins over the
+    // copy filed under periods: that copy is only as fresh as the last save.
+    // A file from before dates were ISO kept the open half's text there too.
     var active = next.periods[next.activePeriod];
     if (saved && Array.isArray(obj.assignments)) active.assignments = shifts(obj.assignments);
-    if (saved && obj.settings && typeof obj.settings.effective === 'string') {
-      active.effective = obj.settings.effective;
-    }
+    if (saved && oldText && !active.start) active.start = dateFrom('', oldText);
     if (!active.assignments) active.assignments = [];
     next.assignments = active.assignments;
-    next.settings.effective = active.effective;
     return next;
   }
 
@@ -559,6 +629,12 @@
     activePeriodLabel: activePeriodLabel,
     switchPeriod: switchPeriod,
     copyOtherPeriod: copyOtherPeriod,
+    periodInEffect: periodInEffect,
+    openPeriodInEffect: openPeriodInEffect,
+    printPeriods: printPeriods,
+    setPrintPeriods: setPrintPeriods,
+    printViews: printViews,
+    printName: printName,
     defaultSettings: defaultSettings,
     emptyState: emptyState,
     sampleTutors: sampleTutors,

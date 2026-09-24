@@ -38,8 +38,15 @@
     <div class="toolbar__group" role="group" aria-label="Print the handout">
       <button type="button" class="btn" id="btn-print">Print / Save as PDF</button>
       <button type="button" class="btn" id="btn-pdf">Download PDF</button>
-      <!-- Outside the settings panel, which is re-rendered from state: it sits
-           with the buttons it changes. -->
+      <!-- Outside the settings panel, which is re-rendered from state: these sit
+           with the buttons they change. -->
+      <label class="toolbar__select" for="print-periods">Print
+        <select id="print-periods" class="select--auto">
+          <option value="both">Both 7 weeks</option>
+          <option value="0">1st 7 weeks only</option>
+          <option value="1">2nd 7 weeks only</option>
+        </select>
+      </label>
       <label class="toolbar__check" title="Add the plain-text shift listing after each calendar">
         <input type="checkbox" id="include-listing"> Include text listing
       </label>

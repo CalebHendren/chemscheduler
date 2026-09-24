@@ -442,25 +442,31 @@
     var pageH = pdf.internal.pageSize.getHeight();
     var margin = 28;
 
-    /* The tutor calendar, then the same handout with the week read by class.
-     * Printed double sided, those are the two faces of one sheet. With the
-     * listing turned on, it follows each calendar instead, so each sheet then
-     * carries a calendar on one face and the listing on the other.
+    /* For each 7 weeks printed -- both by default -- the tutor calendar, then
+     * the same handout with the week read by class. Printed double sided,
+     * those are the two faces of one sheet. With the listing turned on, it
+     * follows each calendar instead, so each sheet then carries a calendar on
+     * one face and the listing on the other.
      */
     var listing = !!s.includeListing;
-    drawCalendarPage(pdf, state, labels, pageW, pageH, margin, false);
-    if (listing) {
-      pdf.addPage();
-      drawListing(pdf, state, labels, pageW, pageH, margin);
-    }
-    pdf.addPage();
-    drawCalendarPage(pdf, state, labels, pageW, pageH, margin, true);
-    if (listing) {
-      pdf.addPage();
-      drawListing(pdf, state, labels, pageW, pageH, margin);
-    }
+    var first = true;
+    var page = function () { if (!first) pdf.addPage(); first = false; };
+    TS.store.printViews().forEach(function (view) {
+      page();
+      drawCalendarPage(pdf, view, labels, pageW, pageH, margin, false);
+      if (listing) {
+        page();
+        drawListing(pdf, view, labels, pageW, pageH, margin);
+      }
+      page();
+      drawCalendarPage(pdf, view, labels, pageW, pageH, margin, true);
+      if (listing) {
+        page();
+        drawListing(pdf, view, labels, pageW, pageH, margin);
+      }
+    });
 
-    return { pdf: pdf, filename: U.handoutName(s) + '.pdf' };
+    return { pdf: pdf, filename: TS.store.printName() + '.pdf' };
   }
 
   /* A whole handout page: the header, the week, the band of shifts held
