@@ -66,24 +66,26 @@
       '</td>';
   }
 
-  /* Both calendars are the same table: a time column, then each day as many
-   * lanes wide as it needs. Only what stands in a lane differs, so the caller
-   * hands over the lanes and says how to draw the cell a block starts in; the
-   * rows it spans below are absorbed by that cell's rowspan.
+  /* Both calendars are the same table: a time column, then each printed day as
+   * many lanes wide as it needs. Only what stands in a lane differs, so the
+   * caller hands over the days -- { day, lanes, grid }, in order -- and says
+   * how to draw the cell a block starts in; the rows it spans below are
+   * absorbed by that cell's rowspan. The wash alternates by position on the
+   * page, so it still alternates when a day is left out.
    */
   function gridTable(what, win, days, cellFor) {
     var rowPx = rowPxFor(win);
     var html = '<table class="pv-table" style="--pv-row:' + rowPx + 'px"><caption class="visually-hidden">' +
-      what + ', ' + U.DAY_NAMES[0] + ' through ' + U.DAY_NAMES[U.DAYS - 1] + ', ' +
+      what + ', ' + U.DAY_NAMES[days[0].day] + ' through ' + U.DAY_NAMES[days[days.length - 1].day] + ', ' +
       esc(U.formatMinutes(U.slotStartMinutes(win.start))) + ' to ' +
       esc(U.formatMinutes(U.slotStartMinutes(win.end))) + '</caption><thead><tr>' +
       '<th scope="col" class="pv-time-head pv-dayend">Time</th>';
-    for (var i = 0; i < U.DAYS; i++) {
-      html += '<th scope="' + (days[i].lanes > 1 ? 'colgroup' : 'col') + '"' +
+    days.forEach(function (col) {
+      html += '<th scope="' + (col.lanes > 1 ? 'colgroup' : 'col') + '"' +
         ' class="pv-dayend"' +
-        (days[i].lanes > 1 ? ' colspan="' + days[i].lanes + '"' : '') + '>' +
-        U.DAY_NAMES[i] + '</th>';
-    }
+        (col.lanes > 1 ? ' colspan="' + col.lanes + '"' : '') + '>' +
+        U.DAY_NAMES[col.day] + '</th>';
+    });
     html += '</tr></thead><tbody>';
 
     for (var s = win.start; s < win.end; s++) {
@@ -92,13 +94,14 @@
         '<th scope="row" class="pv-time">' +
         (onHour ? esc(U.formatMinutes(U.slotStartMinutes(s))) : '') + '</th>';
 
-      for (var d = 0; d < U.DAYS; d++) {
-        for (var l = 0; l < days[d].lanes; l++) {
-          var item = days[d].grid[l] ? days[d].grid[l][s] : null;
+      for (var d = 0; d < days.length; d++) {
+        var col = days[d];
+        for (var l = 0; l < col.lanes; l++) {
+          var item = col.grid[l] ? col.grid[l][s] : null;
           if (!item) {
-            html += '<td class="' + cellClass('pv-empty', d, l, days[d].lanes) + '"></td>';
+            html += '<td class="' + cellClass('pv-empty', d, l, col.lanes) + '"></td>';
           } else if (item.startSlot === s) {
-            html += cellFor(item, cellClass('pv-block', d, l, days[d].lanes), days[d].lanes, rowPx);
+            html += cellFor(item, cellClass('pv-block', d, l, col.lanes), col.lanes, rowPx, days.length);
           }
         }
       }
@@ -108,9 +111,17 @@
     return html + '</tbody></table>';
   }
 
+  // Each printed day's lanes, labelled with the day they belong to.
+  function dayColumns(assignments, laneFor) {
+    return U.printedDays(assignments).map(function (d) {
+      var col = laneFor(d);
+      col.day = d;
+      return col;
+    });
+  }
+
   function buildTable(state, labels) {
-    var days = [];
-    for (var d = 0; d < U.DAYS; d++) days.push(laneGrid(state.assignments, d));
+    var days = dayColumns(state.assignments, function (d) { return laneGrid(state.assignments, d); });
     return gridTable('Weekly tutoring schedule', U.scheduleWindow(state.assignments), days,
       function (a, cls) { return blockCell(a, labels, cls); });
   }
@@ -150,19 +161,24 @@
    * out before it is drawn: a table cell cannot tell its contents to give way
    * line by line. These are the print.css figures the budget rests on.
    */
-  var PAGE_PX = 739;       // 8.5in portrait less the 0.4in inset each side
+  /* Per orientation: the width inside the 0.4in inset each side, and the
+   * height the grid's rows get once the header, the notes and the footer have
+   * theirs. The rows are sized to fill it, shared out over the half hours on
+   * the page; the budget leaves room for a few lines more of notes than the
+   * default, and the cap keeps a short day from turning into a poster. */
+  var PAGES = {
+    portrait: { width: 739, grid: 640 },    // 8.5 x 11in
+    landscape: { width: 979, grid: 420 }    // 11 x 8.5in
+  };
+  var page = PAGES.portrait;               // set from the schedule on each render
   var GUTTER_PX = 60;      // .pv-time
-  /* A portrait page has height to spare, so the rows are sized to fill it:
-   * the grid gets what is left once the header, the notes and the footer have
-   * theirs, shared out over the half hours on the page. The budget leaves room
-   * for a few lines more of notes than the default, and the cap keeps a short
-   * day from turning into a poster. */
-  var GRID_PX = 640;
   var ROW_MIN_PX = 14, ROW_MAX_PX = 34;
+
+  function pagePx() { return page.width; }
 
   function rowPxFor(win) {
     var rows = Math.max(1, win.end - win.start);
-    return Math.max(ROW_MIN_PX, Math.min(ROW_MAX_PX, Math.floor(GRID_PX / rows)));
+    return Math.max(ROW_MIN_PX, Math.min(ROW_MAX_PX, Math.floor(page.grid / rows)));
   }
 
   var LABEL_PX = 12;       // .pv-block__name, 8pt at line-height 1.1
@@ -210,13 +226,13 @@
    * what is left, ending in an ellipsis rather than half a line when they run
    * out of room.
    */
-  function subjectCell(run, labels, cls, lanes, rowPx) {
+  function subjectCell(run, labels, cls, lanes, rowPx, dayCount) {
     var colors = U.coverageColors(run, false);
     var spoken = run.subjects.map(function (i) { return U.SUBJECTS[i].label; });
     var who = namesOf(run.tutorIds, labels);
     var rows = run.endSlot - run.startSlot;
     // 4px bar, 3px padding each side and the borders, as measured.
-    var width = (PAGE_PX - GUTTER_PX) / U.DAYS / Math.max(1, lanes) - 11.5;
+    var width = (pagePx() - GUTTER_PX) / dayCount / Math.max(1, lanes) - 11.5;
 
     // Placed as a share of the block rather than in pixels, so each rule lands
     // on its hour however tall the rows come out.
@@ -278,10 +294,11 @@
 
   function buildSubjectTable(state, labels, runs) {
     if (!runs.length) return '<p>No class is covered yet.</p>';
-    var days = [];
-    for (var d = 0; d < U.DAYS; d++) days.push(subjectLaneGrid(runs, d));
-    return gridTable('Weekly class coverage', U.scheduleWindow(state.assignments),
-      days, function (run, cls, lanes, rowPx) { return subjectCell(run, labels, cls, lanes, rowPx); });
+    var days = dayColumns(state.assignments, function (d) { return subjectLaneGrid(runs, d); });
+    return gridTable('Weekly class coverage', U.scheduleWindow(state.assignments), days,
+      function (run, cls, lanes, rowPx, dayCount) {
+        return subjectCell(run, labels, cls, lanes, rowPx, dayCount);
+      });
   }
 
   function buildSubjectLegend(runs) {
@@ -421,7 +438,24 @@
 
   // Both 7 weeks by default, one after the other, or whichever one the Print
   // choice asks for.
-  function render(container) {
+  /* The page's size and orientation. print.css cannot read a setting, so the
+   * @page rule is written here, next to the pages it describes. */
+  function setPage(orientation) {
+    var landscape = orientation === 'landscape';
+    page = landscape ? PAGES.landscape : PAGES.portrait;
+    if (!doc) return;
+    var style = doc.getElementById('pv-page');
+    if (!style) {
+      style = doc.createElement('style');
+      style.id = 'pv-page';
+      style.media = 'print';
+      doc.head.appendChild(style);
+    }
+    style.textContent = '@page { size: letter ' + (landscape ? 'landscape' : 'portrait') + '; margin: 0; }';
+  }
+
+  function render(container, state) {
+    setPage(state.settings.orientation);
     container.innerHTML = TS.store.printViews().map(renderPeriod).join('');
   }
 

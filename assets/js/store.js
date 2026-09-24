@@ -28,6 +28,8 @@
       // The plain-text listing is optional, so the two calendars can be
       // printed on the two faces of one sheet.
       includeListing: false,
+      // The handout's page: Chemistry posts portrait sheets.
+      orientation: 'portrait',
       minShiftSlots: 2,
       // Up to three at the center through the day, two once the evening starts
       // -- see U.capRules for how a shift already running carries past it.

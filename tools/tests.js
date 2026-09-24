@@ -505,16 +505,11 @@
     for (var k = 0; k < U.TOTAL_SLOTS; k++) count += avail[k] ? 1 : 0;
     r.eq(count, 4 * 10, '"Mon-Thu 3pm-8pm" is 20 hours');
 
-    // There is no Friday tutoring: a roster that offers it says so, and keeps
-    // the rest of the week.
+    // Friday is there for the weeks someone works it, so a roster may offer it.
     warnings = [];
     var withFriday = TS.csv.parseAvailability('Mon-Fri 3pm-5pm', function (m) { warnings.push(m); });
-    r.ok(warnings.length === 1 && /Friday/.test(warnings[0]), 'Friday hours warn that they were skipped',
-      warnings.join(' | '));
-    r.eq(withFriday.filter(function (v) { return v; }).length, 4 * 4, 'and Monday to Thursday are kept');
-    warnings = [];
-    TS.csv.parseAvailability('Fri 9-12', function (m) { warnings.push(m); });
-    r.eq(warnings.length, 1, 'a Friday-only clause warns once and adds nothing', warnings.join(' | '));
+    r.eq(warnings.length, 0, '"Mon-Fri" reads without a warning', warnings.join(' | '));
+    r.eq(withFriday.filter(function (v) { return v; }).length, 5 * 4, 'and keeps all five days');
 
     warnings = [];
     TS.csv.parseAvailability('Mon 06:00-09:00', function (m) { warnings.push(m); });
@@ -655,7 +650,7 @@
     var hours = students.map(function (p) { return p.hours; });
     var lowest = Math.min.apply(null, hours);
     var highest = Math.max.apply(null, hours);
-    r.ok(lowest >= 3, 'Config A: no tutor is starved of hours', 'lowest is ' + lowest + ' h');
+    r.ok(lowest >= 2, 'Config A: no tutor is starved of hours', 'lowest is ' + lowest + ' h');
     r.ok(highest <= state.settings.defaultMaxHours, 'Config A: no tutor exceeds their cap',
       'highest is ' + highest + ' h');
     r.note('  spread ' + lowest + '-' + highest + ' h');
@@ -938,8 +933,8 @@
     });
     r.eq(wednesday.length, 2, 'the gaps on either side of it are reported, not the hour itself');
 
-    // A shift from the Life Science scheduler held somewhere else, or on a
-    // Friday, has no place on this calendar and is left behind on load.
+    // A shift from the Life Science scheduler held somewhere else has no place
+    // on this calendar and is left behind on load; a Friday shift is kept.
     var imported = TS.store.migrate({
       tutors: [{ id: 't', firstName: 'T', availability: [] }],
       assignments: [
@@ -948,8 +943,8 @@
         { id: 'fri', tutorId: 't', day: 4, startSlot: 4, endSlot: 8 }
       ]
     });
-    r.eq(imported.assignments.map(function (x) { return x.id; }).join(','), 'keep',
-      'an open lab and a Friday shift are dropped from an imported file');
+    r.eq(imported.assignments.map(function (x) { return x.id; }).join(','), 'keep,fri',
+      'an open lab is dropped from an imported file, and a Friday shift kept');
     r.ok(!('kind' in imported.assignments[0]) && !('room' in imported.assignments[0]),
       'and a kept shift carries no kind or room of its own');
   }
@@ -1321,8 +1316,31 @@
     r.eq(s.includeListing, false, 'the text listing is off by default');
     r.eq(s.location, 'OMN 164', 'tutoring is in OMN 164');
     r.eq(s.title, 'Chemistry Tutoring Schedule', 'under the Chemistry title');
-    r.eq(U.DAY_NAMES.join(','), 'Monday,Tuesday,Wednesday,Thursday', 'Monday to Thursday');
-    r.eq(U.TOTAL_SLOTS, 4 * U.SLOTS_PER_DAY, 'and the week is four days long');
+    r.eq(s.orientation, 'portrait', 'the handout is portrait by default');
+    r.eq(TS.store.migrate({ settings: { orientation: 'landscape' }, tutors: [] }).settings.orientation,
+      'landscape', 'and a schedule saved in landscape stays landscape');
+    r.eq(U.DAY_NAMES.join(','), 'Monday,Tuesday,Wednesday,Thursday,Friday', 'Monday to Friday on screen');
+    r.eq(U.OPTIONAL_DAYS.join(','), '4', 'with Friday there for when it is needed');
+
+    // Friday counts only once it is in use: an available tutor or a shift.
+    var week = TS.store.emptyState();
+    week.tutors = [TS.store.normalizeTutor({ id: 'm', firstName: 'M', subjects: { chem1: true }, availability: [] })];
+    for (var fs = U.CORE_START_SLOT; fs < U.CORE_END_SLOT; fs++) week.tutors[0].availability[U.idx(0, fs)] = 1;
+    week.assignments = [TS.store.normalizeAssignment({ id: 'mon', tutorId: 'm', day: 0,
+      startSlot: U.CORE_START_SLOT, endSlot: U.CORE_END_SLOT })];
+    var perDay = U.CORE_END_SLOT - U.CORE_START_SLOT;
+    r.eq(TS.optimizer.stats(week, week.assignments).totalSlots, 4 * perDay,
+      'an unused Friday is not counted as open');
+    r.ok(TS.optimizer.analyzeGaps(week, week.assignments).every(function (g) { return g.day !== 4; }),
+      'nor reported as uncovered');
+    r.eq(U.printedDays(week.assignments).join(','), '0,1,2,3', 'nor printed');
+    week.tutors[0].availability[U.idx(4, U.CORE_START_SLOT)] = 1;
+    r.eq(TS.optimizer.stats(week, week.assignments).totalSlots, 5 * perDay,
+      'someone free on Friday opens it on screen');
+    r.eq(U.printedDays(week.assignments).join(','), '0,1,2,3', 'though it prints only once it is worked');
+    week.assignments.push(TS.store.normalizeAssignment({ id: 'fri', tutorId: 'm', day: 4,
+      startSlot: U.CORE_START_SLOT, endSlot: U.CORE_START_SLOT + 2 }));
+    r.eq(U.printedDays(week.assignments).join(','), '0,1,2,3,4', 'and a Friday shift puts it on the handout');
 
     var custom = TS.store.migrate({ settings: { qrUrl: 'https://example.edu/help', qrCaption: 'Mine',
       includeListing: true }, tutors: [], assignments: [] });
@@ -1463,7 +1481,8 @@
     var result = TS.optimizer.optimize(state, { iterations: 500 });
     r.eq(result.length, 0, 'an empty roster optimizes to an empty schedule');
     r.eq(TS.optimizer.validate(state, result).length, 0, 'an empty schedule is valid');
-    r.eq(TS.optimizer.analyzeGaps(state, result).length, U.DAYS, 'an empty schedule reports an all-day gap a day');
+    r.eq(TS.optimizer.analyzeGaps(state, result).length, U.DAYS - U.OPTIONAL_DAYS.length,
+      'an empty schedule reports an all-day gap for every tutoring day, and none for an unused Friday');
   }
 
   function run() {

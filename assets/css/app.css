@@ -303,7 +303,7 @@ legend { font-weight: 700; font-size: 13px; padding: 0 5px; }
 /* Rows butt together with no gap, so the lines between them are continuous
    and every time label can sit exactly on the line it names. */
 .painter {
-  display: grid; grid-template-columns: 54px repeat(4, 1fr);
+  display: grid; grid-template-columns: 54px repeat(5, 1fr);
   grid-auto-rows: 14px; column-gap: 2px;
   user-select: none; margin-bottom: 8px;
 }
@@ -323,7 +323,7 @@ legend { font-weight: 700; font-size: 13px; padding: 0 5px; }
   border: 0; border-top: 1px solid var(--grid-line); padding: 0; cursor: pointer;
 }
 .painter__cell[data-hour="1"] { border-top-color: var(--border-strong); }
-.painter__cell:nth-last-child(-n+4) { border-bottom: 1px solid var(--border-strong); }
+.painter__cell:nth-last-child(-n+5) { border-bottom: 1px solid var(--border-strong); }
 .painter__cell[data-on="1"] { background: var(--accent); border-top-color: rgba(0, 0, 0, .12); }
 /* Inside a painted stretch the lines soften, so it reads as one block; the
    hour lines stay just visible for counting. */
@@ -344,7 +344,7 @@ legend { font-weight: 700; font-size: 13px; padding: 0 5px; }
 
 .calendar {
   display: grid;
-  grid-template-columns: var(--gutter-w) repeat(4, minmax(0, 1fr));
+  grid-template-columns: var(--gutter-w) repeat(5, minmax(0, 1fr));
   border-top: 1px solid var(--grid-line);
 }
 /* The day names pin to the top of the grid's own scroll box, not to the page,

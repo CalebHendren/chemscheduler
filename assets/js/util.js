@@ -7,18 +7,45 @@
    * commit and attaches the single-file build. Semantic versioning -- a new
    * feature is a minor bump, a fix is a patch.
    */
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
 
   var DAY_START_MIN = 7 * 60;      // 7:00 AM
   var SLOT_MINUTES = 30;
   var SLOTS_PER_DAY = 27;          // 7:00 AM through 8:30 PM
 
-  // Chemistry tutoring runs Monday to Thursday. Everything else counts the
-  // week from these two lists, so this is the one place a day is added.
-  var DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday'];
-  var DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu'];
+  var DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  var DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
   var DAYS = DAY_NAMES.length;
   var TOTAL_SLOTS = DAYS * SLOTS_PER_DAY;
+
+  /* Chemistry tutoring runs Monday to Thursday, with Friday there for the
+   * weeks someone works it. An optional day is on the scheduler like any
+   * other, but it only counts -- toward coverage, the uncovered hours, the
+   * printed handout -- once it is in use.
+   */
+  var OPTIONAL_DAYS = [4];
+
+  // Whether a day counts on screen: always, unless it is optional and nobody
+  // is available or scheduled on it.
+  function dayInUse(day, tutors, assignments) {
+    if (OPTIONAL_DAYS.indexOf(day) === -1) return true;
+    if ((assignments || []).some(function (a) { return a.day === day; })) return true;
+    return (tutors || []).some(function (t) {
+      for (var s = 0; s < SLOTS_PER_DAY; s++) if (t.availability && t.availability[idx(day, s)]) return true;
+      return false;
+    });
+  }
+
+  // The days a printed half shows: every required day, and an optional one
+  // only if a shift is on it -- a handout does not carry an empty Friday.
+  function printedDays(assignments) {
+    var days = [];
+    for (var d = 0; d < DAYS; d++) {
+      if (OPTIONAL_DAYS.indexOf(d) === -1 ||
+          (assignments || []).some(function (a) { return a.day === d; })) days.push(d);
+    }
+    return days;
+  }
 
   /* The three Chemistry classes the schedule ships with, headed by course
    * number because that is how students know them. A coordinator can add their
@@ -1060,6 +1087,9 @@
     editorWindow: editorWindow,
     DAY_NAMES: DAY_NAMES,
     DAY_ABBR: DAY_ABBR,
+    OPTIONAL_DAYS: OPTIONAL_DAYS,
+    dayInUse: dayInUse,
+    printedDays: printedDays,
     SUBJECTS: SUBJECTS,
     MAX_SUBJECTS: MAX_SUBJECTS,
     defaultSubjects: defaultSubjects,

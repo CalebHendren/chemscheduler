@@ -87,14 +87,14 @@
     pdf.setFont('times', 'bold');
     pdf.setFontSize(10);
     pdf.setTextColor(255, 255, 255);
-    for (var d = 0; d < U.DAYS; d++) {
-      pdf.text(U.DAY_NAMES[d], g.margin + g.gutterW + g.colW * d + g.colW / 2, g.gridTop + 11, { align: 'center' });
-    }
+    g.days.forEach(function (day, p) {
+      pdf.text(U.DAY_NAMES[day], g.margin + g.gutterW + g.colW * p + g.colW / 2, g.gridTop + 11, { align: 'center' });
+    });
 
-    /* Every other day carries a faint wash. Where two days both run blocks to
-     * their edges, the wash is what tells the eye which column it is reading.
+    /* Every other column carries a faint wash. Where two days both run blocks
+     * to their edges, the wash is what tells the eye which column it is reading.
      */
-    for (var shade = 1; shade < U.DAYS; shade += 2) {
+    for (var shade = 1; shade < g.days.length; shade += 2) {
       pdf.setFillColor(TINT[0], TINT[1], TINT[2]);
       pdf.rect(g.margin + g.gutterW + g.colW * shade, g.bodyTop, g.colW, g.slotCount * g.rowH, 'F');
     }
@@ -122,12 +122,12 @@
   // day-name band.
   function drawDayDividers(pdf, g) {
     var gridEnd = g.bodyTop + g.slotCount * g.rowH;
-    for (var dv = 0; dv <= U.DAYS; dv++) {
+    for (var dv = 0; dv <= g.days.length; dv++) {
       var x = g.margin + g.gutterW + g.colW * dv;
       pdf.setLineWidth(1.4);
       pdf.setDrawColor(NAVY[0], NAVY[1], NAVY[2]);
       pdf.line(x, g.bodyTop, x, gridEnd);
-      if (dv > 0 && dv < U.DAYS) {
+      if (dv > 0 && dv < g.days.length) {
         pdf.setLineWidth(0.8);
         pdf.setDrawColor(255, 255, 255);
         pdf.line(x, g.gridTop + 2, x, g.gridTop + g.headH - 2);
@@ -146,9 +146,8 @@
    */
 
   function drawTutorBlocks(pdf, state, labels, g) {
-    var drawn = state.assignments;
-    for (var day = 0; day < U.DAYS; day++) {
-      var dayBlocks = drawn.filter(function (a) { return a.day === day; });
+    g.days.forEach(function (day, col) {
+      var dayBlocks = state.assignments.filter(function (a) { return a.day === day; });
       var placement = TS.calendar.layoutDay(dayBlocks);
 
       dayBlocks.forEach(function (a) {
@@ -157,7 +156,7 @@
         if (!tutor) return;
 
         var laneW = (g.colW - DAY_PAD * 2) / place.lanes;
-        var bx = g.margin + g.gutterW + g.colW * day + DAY_PAD + laneW * place.lane + 1;
+        var bx = g.margin + g.gutterW + g.colW * col + DAY_PAD + laneW * place.lane + 1;
         var by = g.bodyTop + (a.startSlot - g.win.start) * g.rowH + 0.5;
         var bw = laneW - 2;
         var bh = (a.endSlot - a.startSlot) * g.rowH - 1;
@@ -193,7 +192,7 @@
           }
         }
       });
-    }
+    });
   }
 
   /* The week read by class: one lane per group of classes covered that day, in
@@ -205,9 +204,9 @@
   function drawClassBlocks(pdf, state, labels, g) {
     var runs = U.coverageRuns(state.assignments, state.tutors);
 
-    for (var day = 0; day < U.DAYS; day++) {
+    g.days.forEach(function (day, col) {
       var dayRuns = runs.filter(function (run) { return run.day === day; });
-      if (!dayRuns.length) continue;
+      if (!dayRuns.length) return;
 
       var lanes = [];
       dayRuns.forEach(function (run) {
@@ -217,7 +216,7 @@
 
       dayRuns.forEach(function (run) {
         var laneW = (g.colW - DAY_PAD * 2) / lanes.length;
-        var bx = g.margin + g.gutterW + g.colW * day + DAY_PAD +
+        var bx = g.margin + g.gutterW + g.colW * col + DAY_PAD +
           laneW * lanes.indexOf(run.lane) + 1;
         var by = g.bodyTop + (run.startSlot - g.win.start) * g.rowH + 0.5;
         var bw = laneW - 2;
@@ -258,7 +257,7 @@
           drawSegmentText(pdf, seg, labels, textX, at.top, textW, at.bottom);
         });
       });
-    }
+    });
   }
 
   /* One stretch of a class block with the same tutors in it: who, then its
@@ -428,7 +427,9 @@
 
     var s = state.settings;
     var labels = U.displayNames(state.tutors);
-    var pdf = new root.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    var pdf = new root.jspdf.jsPDF({
+      orientation: s.orientation === 'landscape' ? 'landscape' : 'portrait', unit: 'pt', format: 'letter'
+    });
 
     pdf.setProperties({
       title: s.title + (s.term ? ' — ' + s.term : ''),
@@ -539,13 +540,15 @@
     var gridBottom = pageH - margin - footH;
     var headH = 15;
     var gutterW = 44;
-    var colW = (pageW - margin * 2 - gutterW) / U.DAYS;
+    // The days this half prints: an unused Friday is left off the page.
+    var days = U.printedDays(state.assignments);
+    var colW = (pageW - margin * 2 - gutterW) / days.length;
     var rowH = (gridBottom - gridTop - headH) / slotCount;
     var bodyTop = gridTop + headH;
 
     var geom = {
       pageW: pageW, margin: margin, gridTop: gridTop, headH: headH, gutterW: gutterW,
-      colW: colW, bodyTop: bodyTop, rowH: rowH, win: win, slotCount: slotCount
+      colW: colW, bodyTop: bodyTop, rowH: rowH, win: win, slotCount: slotCount, days: days
     };
 
     /* ---- day columns, hour lines and times ---- */

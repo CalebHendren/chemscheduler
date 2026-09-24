@@ -784,7 +784,8 @@
    * a roster where nobody works mornings would report two thirds of the week as
    * uncovered and give the coordinator nothing to act on.
    * Office hours in a room of their own count as coverage: a student can go
-   * and get help there.
+   * and get help there. An optional day nobody is available for or working
+   * -- an ordinary Friday -- is not open, so it is not counted at all.
    */
   function stats(state, assignments) {
     var ctx = buildContext(state);
@@ -792,6 +793,7 @@
     var win = U.editorWindow(state.tutors, assignments);
     var covered = 0, doubled = 0, subjectSum = 0, openSlots = 0;
     for (var d = 0; d < U.DAYS; d++) {
+      if (!U.dayInUse(d, state.tutors, assignments)) continue;
       for (var s = win.start; s < win.end; s++) {
         var i = U.idx(d, s);
         openSlots++;
@@ -922,6 +924,7 @@
 
     var win = U.editorWindow(state.tutors, assignments);
     for (var d = 0; d < U.DAYS; d++) {
+      if (!U.dayInUse(d, state.tutors, assignments)) continue;
       var run = null;
       for (var s = win.start; s <= win.end; s++) {
         var empty = s < win.end && sol.slotTutors[U.idx(d, s)].length === 0;

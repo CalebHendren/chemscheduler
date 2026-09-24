@@ -6,8 +6,9 @@ Community College. It ships set up for the three Chemistry classes — General C
 [add your own](#the-classes-you-tutor).
 
 Enter your tutors, check the classes each one can tutor, paint their availability, and press
-**Auto-optimize**, or place every shift by hand. You get a Monday–Thursday calendar in portrait
-you can print, hand out and post — with a QR code students can scan to book a tutoring
+**Auto-optimize**, or place every shift by hand. You get a Monday–Thursday calendar — with
+Friday there for the weeks someone works it — in portrait or landscape, that you can print, hand
+out and post — with a QR code students can scan to book a tutoring
 appointment. The term runs as [two 7-week halves](#the-two-7-week-halves), each with a week of
 its own, and a faculty member holding office hours in their own office is
 [drawn on the calendar with their room on it](#office-hours-in-another-room).
@@ -167,7 +168,13 @@ before a rename still lines up.
 
 ## How the schedule is built
 
-The week is divided into 30-minute slots, Monday to Thursday, 7:00 AM to 8:30 PM — 108 slots.
+The week is divided into 30-minute slots, Monday to Friday, 7:00 AM to 8:30 PM — 135 slots.
+
+Chemistry tutors Monday to Thursday, so **Friday counts only once it is in use**. It is on the
+calendar and in the availability painter like any day, but until somebody is available or
+scheduled on a Friday it is not counted in coverage, not reported under **Uncovered time**, and
+not printed. Paint a tutor's Friday hours and it opens up on screen; give them a Friday shift
+and it goes on that 7 weeks' handout too.
 The optimizer builds a first schedule greedily, then spends a couple of seconds improving it
 with simulated annealing. It runs in slices so the page never freezes, and **Cancel** works.
 
@@ -288,8 +295,7 @@ Tue/Thu 13:00-17:30; Wed 09:00-12:00
 ```
 
 Importing is forgiving — `Tues/Thurs 1-4pm` and `Monday 9:00 AM to 2:00 PM` both read
-correctly, and a bare `1-4pm` is understood as the afternoon rather than 1:00 AM. There is no
-Friday tutoring: `M-F 3pm-8pm` keeps Monday to Thursday and warns that Friday was skipped. Anything
+correctly, and a bare `1-4pm` is understood as the afternoon rather than 1:00 AM. Anything
 it cannot read is reported per row instead of being silently dropped, and times outside
 7:00 AM–8:30 PM are trimmed with a warning. Click **Template** for a starter file.
 
@@ -303,8 +309,11 @@ Two buttons, for two different needs:
   two pages: the calendar, the notes, the QR code and the legend, then **Coverage by class** —
   printed double sided, one sheet with a calendar on each face.
 - **Download PDF** — one click, no print dialog, drawn directly with jsPDF. Same pages,
-  same portrait layout and real text (nothing is a screenshot), but jsPDF does not emit a
+  same layout and real text (nothing is a screenshot), but jsPDF does not emit a
   tagged structure tree, so it is the convenience option rather than the accessible one.
+
+The **Layout** choice beside them turns the pages **Portrait** (the default) or **Landscape**.
+It is saved with the schedule, so it comes back the next time and travels in **Export JSON**.
 
 The **Print** choice beside the buttons says which 7 weeks go in the document:
 
@@ -353,7 +362,8 @@ General Chemistry I is blue, II green and Organic orange, each in a lane of its 
 hours count, since a student can get help there: the faculty member's name comes with their
 room, *Dr. Lane (Office 210-B)*.
 
-Both are portrait US Letter, with the grid's rows sized to fill the page. Printing always uses the light theme even if you are working in
+Both are US Letter, portrait or landscape, with the grid's rows sized to fill the page. A Friday
+nobody works that 7 weeks is left off the page, so Monday to Thursday get its width. Printing always uses the light theme even if you are working in
 dark mode. The print stylesheet sets a zero `@page` margin and insets the handout itself, which
 is what keeps Chrome and Edge from stamping the document title across the top of the page and
 the page URL across the bottom — there is no CSS switch for those, only the margin they are
@@ -476,7 +486,7 @@ Or open `tools/selftest.html` in a browser, which needs nothing installed. Both 
 assertions against the same source files: the display-name rules, contrast in both themes for
 every color of every palette size, that a generated palette keeps its closest pair apart for a
 colorblind reader too and that the assignment does not waste that pair on two tutors sitting
-side by side, CSV round-tripping and parsing (Friday hours skipped with a warning), the class
+side by side, CSV round-tripping and parsing, Friday counting and printing only once it is in use, the class
 list and the bitmask it drives, office hours in another room counting as cover but not against
 the room's limit or the minimum shift, the two 7-week halves (their dates, which half opens and prints after the 1st ends, copying, switching, undo across a
 switch, both halves in a file, a tutor removed from both), touching shifts joining into one,

@@ -87,6 +87,7 @@
 
     $('include-listing').checked = !!s.includeListing;
     $('print-periods').value = TS.store.printPeriods();
+    $('page-orientation').value = s.orientation === 'landscape' ? 'landscape' : 'portrait';
   }
 
   function renderStats(state) {
@@ -136,7 +137,7 @@
     'import': 'an import', replace: 'loading a file', theme: 'a theme change',
     listing: 'turning the text listing on or off',
     period: 'switching to the other 7 weeks', 'copy-period': 'copying the other 7 weeks',
-    dates: 'a change to the 7-week dates'
+    dates: 'a change to the 7-week dates', orientation: 'a change to the page layout'
   };
 
   function renderUndo() {
@@ -897,6 +898,11 @@
     $('print-periods').addEventListener('change', function (e) {
       TS.store.setPrintPeriods(e.target.value);
       TS.printview.render($('print-view'), TS.store.state);
+    });
+    // The handout's page, saved with the schedule.
+    $('page-orientation').addEventListener('change', function (e) {
+      TS.store.state.settings.orientation = e.target.value;
+      TS.store.commit('orientation');
     });
     $('include-listing').addEventListener('change', function (e) {
       TS.store.state.settings.includeListing = e.target.checked;

@@ -74,8 +74,6 @@
     t: 1, tu: 1, tue: 1, tues: 1, tuesday: 1,
     w: 2, we: 2, wed: 2, weds: 2, wednesday: 2,
     r: 3, th: 3, thu: 3, thur: 3, thurs: 3, thursday: 3,
-    // Read so a "Mon-Fri" from another roster is understood, then dropped:
-    // there is no tutoring on Friday.
     f: 4, fr: 4, fri: 4, friday: 4
   };
 
@@ -181,14 +179,8 @@
       var split = clause.match(/^([^0-9]+?)\s+(.*)$/);
       if (!split) { warn('Could not read availability clause "' + clause + '"'); return; }
 
-      var named = parseDayList(split[1]);
-      if (!named.length) { warn('Unrecognized day(s) in "' + clause + '"'); return; }
-      var days = named.filter(function (d) { return d < U.DAYS; });
-      if (days.length < named.length) {
-        warn('Skipped Friday in "' + clause + '": tutoring runs ' + U.DAY_NAMES[0] + ' to ' +
-          U.DAY_NAMES[U.DAYS - 1]);
-      }
-      if (!days.length) return;
+      var days = parseDayList(split[1]);
+      if (!days.length) { warn('Unrecognized day(s) in "' + clause + '"'); return; }
 
       var any = false;
       split[2].split(',').forEach(function (range) {

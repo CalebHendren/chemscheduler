@@ -7,9 +7,10 @@
    document title at the top, the page URL at the bottom -- inside whatever the
    @page margin leaves them, and there is no CSS switch to turn that off. Give
    them no margin to draw into and the handout comes out clean; the page inset
-   comes back below as padding on the print root. */
+   comes back below as padding on the print root. The size -- letter, portrait
+   or landscape -- is the schedule's own setting, so printview.js writes it in
+   a <style id="pv-page"> alongside this. */
 @page {
-  size: letter portrait;
   margin: 0;
 }
 
